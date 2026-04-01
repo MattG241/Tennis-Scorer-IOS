@@ -1,22 +1,40 @@
 name: Build and Upload to App Store Connect
 
 on:
-  workflow_dispatch:  # Manual trigger from GitHub UI
+  workflow_dispatch:
 
 jobs:
   build:
-    runs-on: macos-15
+    runs-on: macos-14
     timeout-minutes: 45
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_16.2.app/Contents/Developer
+      - name: List available Xcode versions
+        run: ls /Applications | grep Xcode
 
-      - name: Show Xcode version
-        run: xcodebuild -version
+      - name: Select Xcode
+        run: |
+          # Try Xcode 16.1 first (better runtime compatibility), fall back to 16.0, then 16.2
+          if [ -d "/Applications/Xcode_16.1.app" ]; then
+            sudo xcode-select -s /Applications/Xcode_16.1.app/Contents/Developer
+          elif [ -d "/Applications/Xcode_16.0.app" ]; then
+            sudo xcode-select -s /Applications/Xcode_16.0.app/Contents/Developer
+          elif [ -d "/Applications/Xcode_16.2.app" ]; then
+            sudo xcode-select -s /Applications/Xcode_16.2.app/Contents/Developer
+          else
+            echo "Available Xcode versions:"
+            ls /Applications | grep Xcode
+            echo "Using default"
+          fi
+
+      - name: Show Xcode version and SDKs
+        run: |
+          xcodebuild -version
+          xcodebuild -showsdks | grep -i watch
+          xcrun simctl list runtimes | grep -i watch || true
 
       - name: Create App Store Connect API key file
         env:
@@ -37,7 +55,6 @@ jobs:
             -archivePath $RUNNER_TEMP/TennisScorer.xcarchive \
             CODE_SIGN_STYLE=Automatic \
             DEVELOPMENT_TEAM=DNS7GY854U \
-            ASSETCATALOG_COMPILER_SKIP_VALIDATIONS=YES \
             -allowProvisioningUpdates \
             -authenticationKeyPath ~/private_keys/AuthKey_${{ secrets.APPSTORE_API_KEY_ID }}.p8 \
             -authenticationKeyID ${{ secrets.APPSTORE_API_KEY_ID }} \
