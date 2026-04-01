@@ -23,9 +23,10 @@ jobs:
           APPSTORE_API_KEY: ${{ secrets.APPSTORE_API_KEY }}
         run: |
           mkdir -p ~/private_keys
-          echo "$APPSTORE_API_KEY" | base64 --decode > ~/private_keys/AuthKey_${{ secrets.APPSTORE_API_KEY_ID }}.p8
-          echo "Key file size: $(wc -c < ~/private_keys/AuthKey_${{ secrets.APPSTORE_API_KEY_ID }}.p8) bytes"
-          head -1 ~/private_keys/AuthKey_${{ secrets.APPSTORE_API_KEY_ID }}.p8
+          KEY_FILE=~/private_keys/AuthKey_${{ secrets.APPSTORE_API_KEY_ID }}.p8
+          echo "$APPSTORE_API_KEY" > "$KEY_FILE"
+          echo "Key file size: $(wc -c < "$KEY_FILE") bytes"
+          head -1 "$KEY_FILE"
 
       - name: Build archive
         run: |
