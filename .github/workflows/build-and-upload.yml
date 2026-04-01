@@ -18,9 +18,6 @@ jobs:
       - name: Show Xcode version
         run: xcodebuild -version
 
-      - name: Install watchOS platform
-        run: xcodebuild -downloadPlatform watchOS
-
       - name: Create App Store Connect API key file
         env:
           APPSTORE_API_KEY: ${{ secrets.APPSTORE_API_KEY }}
