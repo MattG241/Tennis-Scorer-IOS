@@ -156,8 +156,8 @@ struct SituationDetector {
 
         switch format {
         case .noAd:
-            // At 3-3 (deuce) it's sudden death – any point wins.
-            return maxPts >= 4 || (a == 3 && b == 3)
+            // No-Ad: first to 4 raw points wins (mirrors TennisEngine exactly).
+            return maxPts >= 4
         default:
             return maxPts >= 4 && diff >= 2
         }

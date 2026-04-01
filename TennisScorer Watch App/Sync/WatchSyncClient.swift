@@ -9,6 +9,8 @@ class WatchSyncClient: NSObject, ObservableObject, WCSessionDelegate {
 
     var onConfigReceived: ((MatchConfig) -> Void)?
     var onStateReceived: ((MatchState) -> Void)?
+    var onEndMatchReceived: (() -> Void)?
+    var onScoringModeReceived: ((String) -> Void)?
 
     private override init() {
         super.init()
@@ -17,30 +19,38 @@ class WatchSyncClient: NSObject, ObservableObject, WCSessionDelegate {
     // MARK: - Activation
 
     func activate() {
-        guard WCSession.isSupported() else { return }
+        guard WCSession.isSupported() else {
+            print("[WatchSyncClient] WCSession NOT supported")
+            return
+        }
         let session = WCSession.default
         session.delegate = self
         session.activate()
+        print("[WatchSyncClient] WCSession activation requested")
     }
 
     // MARK: - Sending
 
     func sendMatchState(_ state: MatchState) {
-        guard WCSession.default.isReachable else { return }
-        guard let payload = encode(state) else { return }
+        let session = WCSession.default
+        guard session.activationState == .activated else {
+            print("[WatchSyncClient] sendMatchState: session not activated")
+            return
+        }
+        guard let payload = encode(state) else {
+            print("[WatchSyncClient] sendMatchState: failed to encode state")
+            return
+        }
         let message: [String: Any] = ["type": "match_state", "payload": payload]
-        WCSession.default.sendMessage(message, replyHandler: nil, errorHandler: { error in
-            print("[WatchSyncClient] sendMatchState error: \(error)")
-        })
-    }
-
-    func sendPointEvent(_ event: PointEvent) {
-        guard WCSession.default.isReachable else { return }
-        guard let payload = encode(event) else { return }
-        let message: [String: Any] = ["type": "point_event", "payload": payload]
-        WCSession.default.sendMessage(message, replyHandler: nil, errorHandler: { error in
-            print("[WatchSyncClient] sendPointEvent error: \(error)")
-        })
+        if session.isReachable {
+            print("[WatchSyncClient] Sending match_state to phone (reachable)")
+            session.sendMessage(message, replyHandler: nil) { error in
+                print("[WatchSyncClient] sendMatchState error: \(error)")
+            }
+        } else {
+            print("[WatchSyncClient] Sending match_state via transferUserInfo (not reachable)")
+            session.transferUserInfo(message)
+        }
     }
 
     func requestSpeakScore(state: MatchState) {
@@ -50,6 +60,40 @@ class WatchSyncClient: NSObject, ObservableObject, WCSessionDelegate {
         WCSession.default.sendMessage(message, replyHandler: nil, errorHandler: { error in
             print("[WatchSyncClient] requestSpeakScore error: \(error)")
         })
+    }
+
+    /// Tells the phone to play a walkout song for the given side ("A" or "B").
+    func sendPlayWalkout(side: String) {
+        let session = WCSession.default
+        guard session.activationState == .activated, session.isReachable else { return }
+        let message: [String: Any] = ["type": "play_walkout", "payload": side]
+        session.sendMessage(message, replyHandler: nil) { error in
+            print("[WatchSyncClient] sendPlayWalkout error: \(error)")
+        }
+    }
+
+    /// Tells the phone to stop any walkout song.
+    func sendStopWalkout() {
+        let session = WCSession.default
+        guard session.activationState == .activated, session.isReachable else { return }
+        let message: [String: Any] = ["type": "stop_walkout"]
+        session.sendMessage(message, replyHandler: nil) { error in
+            print("[WatchSyncClient] sendStopWalkout error: \(error)")
+        }
+    }
+
+    /// Tells the phone that the watch has ended the match.
+    func sendEndMatch() {
+        let session = WCSession.default
+        guard session.activationState == .activated else { return }
+        let message: [String: Any] = ["type": "end_match"]
+        if session.isReachable {
+            session.sendMessage(message, replyHandler: nil) { error in
+                print("[WatchSyncClient] sendEndMatch error: \(error)")
+            }
+        } else {
+            session.transferUserInfo(message)
+        }
     }
 
     // MARK: - Encoding helpers
@@ -69,17 +113,45 @@ class WatchSyncClient: NSObject, ObservableObject, WCSessionDelegate {
     func session(_ session: WCSession,
                  activationDidCompleteWith activationState: WCSessionActivationState,
                  error: Error?) {
+        print("[WatchSyncClient] Activation complete — state: \(activationState.rawValue), reachable: \(session.isReachable)")
         DispatchQueue.main.async {
             self.isPhoneReachable = session.isReachable
         }
         if let error = error {
             print("[WatchSyncClient] Activation error: \(error)")
         }
+        // Check for any pending application context from the phone
+        if activationState == .activated {
+            let ctx = session.receivedApplicationContext
+            if !ctx.isEmpty {
+                print("[WatchSyncClient] Found pending applicationContext: \(ctx.keys)")
+                handleIncomingMessage(ctx)
+            }
+            // Ask the phone for current state
+            requestStateSync()
+        }
     }
 
     func sessionReachabilityDidChange(_ session: WCSession) {
+        print("[WatchSyncClient] Reachability changed — reachable: \(session.isReachable)")
         DispatchQueue.main.async {
             self.isPhoneReachable = session.isReachable
+        }
+        if session.isReachable {
+            requestStateSync()
+        }
+    }
+
+    /// Asks the phone to send its current match state/config.
+    func requestStateSync() {
+        let session = WCSession.default
+        guard session.activationState == .activated else { return }
+        let message: [String: Any] = ["type": "request_state"]
+        if session.isReachable {
+            print("[WatchSyncClient] Requesting state sync from phone")
+            session.sendMessage(message, replyHandler: nil) { error in
+                print("[WatchSyncClient] requestStateSync error: \(error)")
+            }
         }
     }
 
@@ -102,21 +174,27 @@ class WatchSyncClient: NSObject, ObservableObject, WCSessionDelegate {
     // MARK: - Message routing
 
     private func handleIncomingMessage(_ message: [String: Any]) {
-        guard
-            let type = message["type"] as? String,
-            let payload = message["payload"] as? String
-        else { return }
+        guard let type = message["type"] as? String else { return }
 
         DispatchQueue.main.async {
             switch type {
+            case "end_match":
+                self.onEndMatchReceived?()
+
             case "match_config":
-                if let config = self.decode(MatchConfig.self, from: payload) {
-                    self.onConfigReceived?(config)
-                }
+                guard let payload = message["payload"] as? String,
+                      let config = self.decode(MatchConfig.self, from: payload) else { return }
+                self.onConfigReceived?(config)
+
             case "match_state":
-                if let state = self.decode(MatchState.self, from: payload) {
-                    self.onStateReceived?(state)
-                }
+                guard let payload = message["payload"] as? String,
+                      let state = self.decode(MatchState.self, from: payload) else { return }
+                self.onStateReceived?(state)
+
+            case "scoring_mode":
+                let mode = message["payload"] as? String ?? "watch"
+                self.onScoringModeReceived?(mode)
+
             default:
                 print("[WatchSyncClient] Unhandled message type: \(type)")
             }

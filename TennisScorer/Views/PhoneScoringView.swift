@@ -11,11 +11,11 @@ import SwiftUI
 struct PhoneScoringView: View {
 
     @ObservedObject var viewModel: PhoneScoringViewModel
+    @ObservedObject private var walkoutPlayer = WalkoutPlayer.shared
     @Environment(\.dismiss) private var dismiss
 
     @State private var showDismissAlert = false
     @State private var showSpeedInput = false
-    @State private var speedInputText = ""
 
     // Press-animation scale per player
     @State private var scaleA: CGFloat = 1.0
@@ -29,11 +29,17 @@ struct PhoneScoringView: View {
                 VStack(spacing: 0) {
                     // TOP ~28%: Score card
                     scoreCardSection
-                        .frame(height: geo.size.height * 0.28)
+                        .frame(height: geo.size.height * (hasWalkoutSongs ? 0.25 : 0.28))
+
+                    // Walkout music bar (if songs configured)
+                    if hasWalkoutSongs {
+                        walkoutBar
+                            .frame(height: geo.size.height * 0.06)
+                    }
 
                     // MIDDLE ~50%: Player tap buttons
                     playerButtonSection
-                        .frame(height: geo.size.height * 0.50)
+                        .frame(height: geo.size.height * (hasWalkoutSongs ? 0.47 : 0.50))
 
                     // BOTTOM ~22%: Control bar
                     controlBarSection
@@ -44,7 +50,7 @@ struct PhoneScoringView: View {
                 if viewModel.isMatchOver {
                     matchWonOverlay
                         .transition(.opacity.combined(with: .scale(scale: 0.9)))
-                        .animation(.spring(duration: 0.4), value: viewModel.isMatchOver)
+                        .animation(.spring(response: 0.4, dampingFraction: 0.7), value: viewModel.isMatchOver)
                 }
             }
         }
@@ -52,6 +58,8 @@ struct PhoneScoringView: View {
         .navigationTitle(matchTitle)
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(true)
+        .onAppear  { UIApplication.shared.isIdleTimerDisabled = true  }
+        .onDisappear { UIApplication.shared.isIdleTimerDisabled = false }
         .toolbar {
             ToolbarItem(placement: .navigationBarLeading) {
                 Button {
@@ -65,12 +73,16 @@ struct PhoneScoringView: View {
                         .fontWeight(.semibold)
                 }
             }
+            ToolbarItem(placement: .navigationBarTrailing) {
+                CastButtonView()
+                    .frame(width: 24, height: 24)
+            }
         }
-        .alert("End Scoring?", isPresented: $showDismissAlert) {
-            Button("Close", role: .destructive) { dismiss() }
+        .alert("Leave Scoring?", isPresented: $showDismissAlert) {
+            Button("Leave", role: .destructive) { dismiss() }
             Button("Cancel", role: .cancel) { }
         } message: {
-            Text("The match is still in progress. Return to Live to continue later.")
+            Text("The match is still in progress. You can resume it from the Live tab.")
         }
         .sheet(isPresented: $showSpeedInput) {
             SpeedInputSheet(speedKmh: viewModel.lastServeSpeedKmh) { speed in
@@ -210,8 +222,25 @@ struct PhoneScoringView: View {
 
                 // Point tag chips
                 ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        ForEach(PointTag.allCases, id: \.self) { tag in
+                    HStack(spacing: 6) {
+                        // 1st / 2nd serve toggle
+                        ServeTypeChip(
+                            label: "1st",
+                            isSelected: viewModel.selectedServeType == .first
+                        ) { viewModel.selectedServeType = .first }
+
+                        ServeTypeChip(
+                            label: "2nd",
+                            isSelected: viewModel.selectedServeType == .second
+                        ) { viewModel.selectedServeType = .second }
+
+                        Rectangle()
+                            .fill(Color(uiColor: .separator))
+                            .frame(width: 1, height: 20)
+                            .padding(.horizontal, 2)
+
+                        // Point outcome tags (excluding Normal — it's the implicit default)
+                        ForEach(PointTag.allCases.filter { $0 != .normal }, id: \.self) { tag in
                             PointTagChip(
                                 tag: tag,
                                 isSelected: viewModel.selectedPointTag == tag
@@ -272,6 +301,13 @@ struct PhoneScoringView: View {
                     .font(.title3)
                     .foregroundStyle(.white.opacity(0.85))
 
+                ShareLink(item: overlayShareText) {
+                    Label("Share Result", systemImage: "square.and.arrow.up")
+                        .font(.subheadline)
+                }
+                .buttonStyle(.bordered)
+                .tint(.white)
+
                 HStack(spacing: 16) {
                     Button("New Match") {
                         viewModel.requestNewMatch()
@@ -286,13 +322,90 @@ struct PhoneScoringView: View {
                     .buttonStyle(.borderedProminent)
                     .tint(TennisColors.courtGreenDark)
                 }
-                .padding(.top, 8)
+                .padding(.top, 4)
             }
             .padding(32)
             .background(Color(uiColor: .systemBackground).opacity(0.15))
             .clipShape(RoundedRectangle(cornerRadius: 24))
             .padding(.horizontal, 24)
         }
+    }
+
+    // MARK: - Walkout Bar
+
+    private var hasWalkoutSongs: Bool {
+        viewModel.matchState.config.walkoutSongA != nil || viewModel.matchState.config.walkoutSongB != nil
+    }
+
+    private var walkoutBar: some View {
+        let config = viewModel.matchState.config
+        return HStack(spacing: 8) {
+            Image(systemName: "music.note")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            if let songA = config.walkoutSongA {
+                Button {
+                    if walkoutPlayer.isPlaying && walkoutPlayer.currentSong == songA {
+                        walkoutPlayer.stop()
+                    } else {
+                        walkoutPlayer.play(songA)
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: walkoutPlayer.isPlaying && walkoutPlayer.currentSong == songA ? "stop.fill" : "play.fill")
+                            .font(.caption2)
+                        Text(config.teamName(.A))
+                            .font(.caption2)
+                            .lineLimit(1)
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(TennisColors.scoreBlue.opacity(0.15))
+                    .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+            }
+
+            if let songB = config.walkoutSongB {
+                Button {
+                    if walkoutPlayer.isPlaying && walkoutPlayer.currentSong == songB {
+                        walkoutPlayer.stop()
+                    } else {
+                        walkoutPlayer.play(songB)
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: walkoutPlayer.isPlaying && walkoutPlayer.currentSong == songB ? "stop.fill" : "play.fill")
+                            .font(.caption2)
+                        Text(config.teamName(.B))
+                            .font(.caption2)
+                            .lineLimit(1)
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(TennisColors.courtGreenDark.opacity(0.15))
+                    .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+            }
+
+            if walkoutPlayer.isPlaying {
+                Button {
+                    walkoutPlayer.stop()
+                } label: {
+                    Image(systemName: "stop.circle")
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
+                .buttonStyle(.plain)
+            }
+
+            Spacer()
+        }
+        .padding(.horizontal, 12)
+        .frame(maxWidth: .infinity)
+        .background(Color(uiColor: .secondarySystemBackground))
     }
 
     // MARK: - Helpers
@@ -307,14 +420,37 @@ struct PhoneScoringView: View {
         return sets.map { "\($0.gamesA)-\($0.gamesB)" }.joined(separator: "  ")
     }
 
+    private var overlayShareText: String {
+        let state  = viewModel.matchState
+        let config = state.config
+        var lines  = [
+            "🎾 Tennis Match Result",
+            "",
+            "\(config.teamName(.A)) vs \(config.teamName(.B))",
+            "Score: \(finalScoreText)",
+        ]
+        if let winner = state.winner {
+            lines.append("\(config.teamName(winner)) wins!")
+        }
+        lines += ["", "Scored with Tennis Scorer"]
+        return lines.joined(separator: "\n")
+    }
+
     private func awardPoint(to side: PlayerSide) {
+        // Stop walkout music on first point scored
+        walkoutPlayer.stop()
+
+        // Haptic feedback
+        let haptic = UIImpactFeedbackGenerator(style: .medium)
+        haptic.impactOccurred()
+
         // Spring press animation
         let scaleBinding = side == .A ? $scaleA : $scaleB
-        withAnimation(.spring(duration: 0.12)) {
+        withAnimation(.spring(response: 0.12, dampingFraction: 0.7)) {
             scaleBinding.wrappedValue = 0.96
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.13) {
-            withAnimation(.spring(duration: 0.2)) {
+            withAnimation(.spring(response: 0.2, dampingFraction: 0.7)) {
                 scaleBinding.wrappedValue = 1.0
             }
         }
@@ -344,17 +480,17 @@ private struct ScoringPlayerButton: View {
                         .multilineTextAlignment(.center)
                         .lineLimit(2)
 
-                    if isServing {
-                        Text("SERVING")
-                            .font(.caption.bold())
-                            .foregroundStyle(TennisColors.tennisBall)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 3)
-                            .overlay(
-                                Capsule()
-                                    .stroke(TennisColors.tennisBall, lineWidth: 1)
-                            )
-                    }
+                    // Always reserve space for the badge to prevent layout jumps.
+                    Text("SERVING")
+                        .font(.caption.bold())
+                        .foregroundStyle(TennisColors.tennisBall)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .overlay(
+                            Capsule()
+                                .stroke(TennisColors.tennisBall, lineWidth: 1)
+                        )
+                        .opacity(isServing ? 1 : 0)
 
                     // +1 indicator circle (decorative)
                     ZStack {
@@ -414,6 +550,27 @@ private struct PointTagChip: View {
         case .winner:       return TennisColors.scoreBlue
         case .unforcedError: return .orange
         }
+    }
+}
+
+// MARK: - ServeTypeChip
+
+private struct ServeTypeChip: View {
+    let label: String
+    let isSelected: Bool
+    let onTap: () -> Void
+
+    var body: some View {
+        Button(action: onTap) {
+            Text(label)
+                .font(.caption.bold())
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(isSelected ? TennisColors.courtGreenDark : Color(uiColor: .tertiarySystemBackground))
+                .foregroundStyle(isSelected ? .white : .primary)
+                .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
     }
 }
 

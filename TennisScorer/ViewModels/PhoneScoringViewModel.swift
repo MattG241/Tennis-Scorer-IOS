@@ -7,10 +7,26 @@ class PhoneScoringViewModel: ObservableObject {
 
     @Published var state: MatchState
     @Published var situation: GameSituation = .none
-    @Published var selectedTag: PointTag = .normal
+    @Published var selectedPointTag: PointTag = .normal
     @Published var selectedServeType: ServeType = .first
-    @Published var serveSpeedKmh: Double? = nil
+    @Published var lastServeSpeedKmh: Double? = nil
     @Published var isMatchOver: Bool = false
+    @Published var matchDuration: String = "0:00"
+
+    // MARK: - Computed convenience aliases (used by views)
+
+    var matchState: MatchState { state }
+    var canUndo: Bool { engine.canUndo }
+    var gameSituation: GameSituation { situation }
+
+    var currentPointScore: String {
+        ScoreFormatter.displayPoints(state)
+    }
+
+    // MARK: - Callbacks
+
+    /// Called when the user taps "New Match" on the match-won overlay.
+    var onRequestNewMatch: (() -> Void)?
 
     // MARK: - Dependencies
 
@@ -20,6 +36,10 @@ class PhoneScoringViewModel: ObservableObject {
     private let watchSync: WatchSyncManager
     private let castManager: CastManager
     let voiceMode: VoiceCalloutMode
+
+    // MARK: - Timer
+
+    private var timerCancellable: AnyCancellable?
 
     // MARK: - Init from config (new match)
 
@@ -40,6 +60,7 @@ class PhoneScoringViewModel: ObservableObject {
         self.castManager = castManager
 
         refreshDerived()
+        startTimer()
     }
 
     // MARK: - Init from existing state (resume match)
@@ -61,26 +82,22 @@ class PhoneScoringViewModel: ObservableObject {
         self.castManager = castManager
 
         refreshDerived()
+        startTimer()
     }
 
     // MARK: - Actions
 
     func awardPoint(to side: PlayerSide) {
         let previous = engine.state
-        engine.awardPoint(
-            to: side,
-            tag: selectedTag,
-            serveType: selectedServeType
-        )
-        afterStateChange(previous: previous)
+        let event = engine.awardPoint(to: side, tag: selectedPointTag)
+        afterStateChange(previous: previous, event: event)
     }
 
-    func undo() {
+    func undoLastPoint() {
         engine.undo()
-        state     = engine.state
-        situation = SituationDetector.detect(state)
+        state       = engine.state
+        situation   = SituationDetector.detect(state)
         isMatchOver = (state.winner != nil)
-        // Do not speak on undo — just refresh UI state silently.
         watchSync.sendMatchState(state)
         castManager.sendMatchState(state)
     }
@@ -88,7 +105,27 @@ class PhoneScoringViewModel: ObservableObject {
     func endMatch() {
         let previous = engine.state
         engine.endMatchNow()
-        afterStateChange(previous: previous)
+        afterStateChange(previous: previous, event: nil)
+    }
+
+    /// Apply a state received from the Watch without re-scoring or echoing back.
+    func applyReceivedState(_ newState: MatchState) {
+        let previous = state
+        engine      = TennisEngine(state: newState)
+        state       = newState
+        situation   = SituationDetector.detect(newState)
+        isMatchOver = (newState.winner != nil)
+        repository.saveMatchState(newState)
+        // Speak the score change from the watch
+        speaker.speakTransition(previous: previous, current: newState, mode: voiceMode)
+    }
+
+    func speakScore() {
+        speaker.speakFullScore(state, mode: voiceMode)
+    }
+
+    func requestNewMatch() {
+        onRequestNewMatch?()
     }
 
     // MARK: - Private
@@ -96,41 +133,54 @@ class PhoneScoringViewModel: ObservableObject {
     private func refreshDerived() {
         situation   = SituationDetector.detect(state)
         isMatchOver = (state.winner != nil)
+        updateDuration()
+    }
+
+    private func startTimer() {
+        timerCancellable = Timer.publish(every: 1, on: .main, in: .common)
+            .autoconnect()
+            .sink { [weak self] _ in self?.updateDuration() }
+    }
+
+    private func updateDuration() {
+        let startMs  = state.startedAtMs
+        let nowMs    = Int64(Date().timeIntervalSince1970 * 1000)
+        let elapsed  = max(0, Int((nowMs - startMs) / 1000))
+        let minutes  = elapsed / 60
+        let seconds  = elapsed % 60
+        matchDuration = String(format: "%d:%02d", minutes, seconds)
     }
 
     /// Called after every engine mutation that advances the match.
-    private func afterStateChange(previous: MatchState) {
+    private func afterStateChange(previous: MatchState, event: PointEvent?) {
         let current = engine.state
 
         // 1. Update published properties.
-        state     = current
-        situation = SituationDetector.detect(current)
+        state       = current
+        situation   = SituationDetector.detect(current)
         isMatchOver = (current.winner != nil)
 
         // 2. Persist match state.
         repository.saveMatchState(current)
 
-        // 3. Persist the point event that was just recorded, if any.
-        if let lastEvent = current.pointHistory.last {
-            repository.savePointEvent(lastEvent,
+        // 3. Persist the point event, if one was generated.
+        if let event = event {
+            repository.savePointEvent(event,
                                       serveType: selectedServeType,
-                                      speedKmh: serveSpeedKmh)
+                                      speedKmh: lastServeSpeedKmh)
         }
 
         // 4. Sync to watch.
         watchSync.sendMatchState(current)
 
-        // 5. Cast to Chromecast (stub until CocoaPods wired up).
+        // 5. Cast (stub until CocoaPods wired up).
         castManager.sendMatchState(current)
 
         // 6. Speak the transition.
         speaker.speakTransition(previous: previous, current: current, mode: voiceMode)
 
-        // 7. Reset per-point selections.
-        selectedTag = .normal
-        // Note: selectedServeType and serveSpeedKmh are intentionally preserved
-        // between points so the scorer doesn't have to re-select them each time.
-        // Reset serveSpeedKmh since speed is unique per serve.
-        serveSpeedKmh = nil
+        // 7. Reset per-point selections; keep last speed as a starting reference.
+        selectedPointTag  = .normal
+        selectedServeType = .first
     }
 }

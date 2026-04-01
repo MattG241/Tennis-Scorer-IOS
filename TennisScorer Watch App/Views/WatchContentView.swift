@@ -13,6 +13,10 @@ struct WatchContentView: View {
                 MatchWonView(state: state, onNewMatch: {
                     viewModel.endMatchAndReset()
                 })
+            } else if viewModel.showWalkout {
+                WalkoutView()
+            } else if viewModel.scoringOnPhone {
+                WatchScoreDisplayView(state: state)
             } else {
                 MatchControlView()
             }

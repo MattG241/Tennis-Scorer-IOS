@@ -1,7 +1,7 @@
 // SetupView.swift
 // TennisScorer
 //
-// Match setup form: player names, format, first server, voice mode and coin toss.
+// Match setup form: player names, format, first server, voice mode, voice picker and coin toss.
 
 import SwiftUI
 
@@ -11,6 +11,9 @@ struct SetupView: View {
 
     @EnvironmentObject var mainViewModel: MainViewModel
     @EnvironmentObject var settings: AppSettings
+    @ObservedObject private var speaker = ScoreSpeaker.shared
+    @ObservedObject private var watchSync = WatchSyncManager.shared
+    @ObservedObject private var walkoutPlayer = WalkoutPlayer.shared
 
     @Binding var selectedTab: AppTab
 
@@ -23,14 +26,22 @@ struct SetupView: View {
     @State private var format: MatchFormat = .bestOf3
     @State private var firstServer: PlayerSide = .A
     @State private var voiceMode: VoiceCalloutMode = .withPlayerNames
+    @State private var walkoutSongA: String? = nil
+    @State private var walkoutSongB: String? = nil
 
     // Coin toss
     @State private var coinRotation: Double = 0
     @State private var isTossing: Bool = false
     @State private var tossResultLabel: String? = nil
 
-    // Start match sheet
-    @State private var showPhoneScoring = false
+    // Replace alert
+    @State private var showReplaceAlert = false
+    @State private var pendingAction: PendingStartAction? = nil
+
+    private enum PendingStartAction {
+        case phone
+        case watch
+    }
 
     var body: some View {
         NavigationStack {
@@ -48,19 +59,23 @@ struct SetupView: View {
                 Section("Players") {
                     TextField("Player A name", text: $playerA)
                         .autocorrectionDisabled()
+                        .textInputAutocapitalization(.words)
 
                     if matchType == .doubles {
                         TextField("Player A2 name (partner)", text: $playerA2)
                             .autocorrectionDisabled()
+                            .textInputAutocapitalization(.words)
                             .transition(.opacity.combined(with: .move(edge: .top)))
                     }
 
                     TextField("Player B name", text: $playerB)
                         .autocorrectionDisabled()
+                        .textInputAutocapitalization(.words)
 
                     if matchType == .doubles {
                         TextField("Player B2 name (partner)", text: $playerB2)
                             .autocorrectionDisabled()
+                            .textInputAutocapitalization(.words)
                             .transition(.opacity.combined(with: .move(edge: .top)))
                     }
                 }
@@ -68,20 +83,13 @@ struct SetupView: View {
 
                 // MARK: Format
                 Section("Format") {
-                    Button {
-                        cycleFormat()
-                    } label: {
-                        HStack {
-                            Text("Format")
-                                .foregroundStyle(.primary)
-                            Spacer()
-                            Text(formatDisplayName(format))
-                                .foregroundStyle(TennisColors.scoreBlue)
-                            Image(systemName: "chevron.right")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                    Picker("Format", selection: $format) {
+                        ForEach(MatchFormat.allCases, id: \.self) { f in
+                            Text(formatDisplayName(f)).tag(f)
                         }
                     }
+                    .pickerStyle(.menu)
+                    .tint(TennisColors.scoreBlue)
                 }
 
                 // MARK: First Server
@@ -125,6 +133,55 @@ struct SetupView: View {
                     Text("Coin Toss")
                 }
 
+                // MARK: Walkout Songs
+                Section("Walkout Songs") {
+                    let songs = walkoutPlayer.listSongs()
+
+                    WalkoutSongPicker(
+                        label: displayName(.A),
+                        selection: $walkoutSongA,
+                        songs: songs
+                    )
+
+                    if walkoutSongA != nil {
+                        Button {
+                            if walkoutPlayer.isPlaying && walkoutPlayer.currentSong == walkoutSongA {
+                                walkoutPlayer.stop()
+                            } else {
+                                walkoutPlayer.play(walkoutSongA!)
+                            }
+                        } label: {
+                            Label(
+                                walkoutPlayer.isPlaying && walkoutPlayer.currentSong == walkoutSongA ? "Stop" : "Preview",
+                                systemImage: walkoutPlayer.isPlaying && walkoutPlayer.currentSong == walkoutSongA ? "stop.fill" : "play.fill"
+                            )
+                            .font(.caption)
+                        }
+                    }
+
+                    WalkoutSongPicker(
+                        label: displayName(.B),
+                        selection: $walkoutSongB,
+                        songs: songs
+                    )
+
+                    if walkoutSongB != nil {
+                        Button {
+                            if walkoutPlayer.isPlaying && walkoutPlayer.currentSong == walkoutSongB {
+                                walkoutPlayer.stop()
+                            } else {
+                                walkoutPlayer.play(walkoutSongB!)
+                            }
+                        } label: {
+                            Label(
+                                walkoutPlayer.isPlaying && walkoutPlayer.currentSong == walkoutSongB ? "Stop" : "Preview",
+                                systemImage: walkoutPlayer.isPlaying && walkoutPlayer.currentSong == walkoutSongB ? "stop.fill" : "play.fill"
+                            )
+                            .font(.caption)
+                        }
+                    }
+                }
+
                 // MARK: Voice Callouts
                 Section("Voice Callouts") {
                     Picker("Voice Mode", selection: $voiceMode) {
@@ -135,12 +192,31 @@ struct SetupView: View {
                     .pickerStyle(.menu)
                 }
 
+                // MARK: Announcer Voice
+                Section("Announcer Voice") {
+                    Picker("Voice", selection: $speaker.selectedVoiceId) {
+                        ForEach(speaker.availableVoices) { voice in
+                            Text(voice.displayName).tag(voice.id)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .onChange(of: speaker.selectedVoiceId) { newValue in
+                        speaker.setVoice(newValue)
+                    }
+
+                    Button {
+                        speaker.previewVoice()
+                    } label: {
+                        Label("Preview Voice", systemImage: "speaker.wave.2")
+                    }
+                }
+
                 // MARK: Start Match
                 Section {
                     Button {
-                        startMatch()
+                        startMatch(action: .phone)
                     } label: {
-                        Text("Start Match")
+                        Label("Score on Phone", systemImage: "iphone")
                             .font(.headline)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 6)
@@ -148,15 +224,32 @@ struct SetupView: View {
                     .buttonStyle(.borderedProminent)
                     .tint(TennisColors.courtGreenDark)
                     .disabled(!canStart)
+
+                    Button {
+                        startMatch(action: .watch)
+                    } label: {
+                        Label("Send to Watch", systemImage: "applewatch")
+                            .font(.headline)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 6)
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(TennisColors.scoreBlue)
+                    .disabled(!canStart)
                 }
             }
             .navigationTitle("Setup")
             .onAppear { applyDefaults() }
         }
-        .sheet(isPresented: $showPhoneScoring) {
-            if let scoringVM = mainViewModel.scoringViewModel {
-                PhoneScoringView(viewModel: scoringVM)
+        .alert("Replace Active Match?", isPresented: $showReplaceAlert) {
+            Button("Abandon & Start New", role: .destructive) {
+                if let action = pendingAction {
+                    doStartMatch(action: action)
+                }
             }
+            Button("Cancel", role: .cancel) { pendingAction = nil }
+        } message: {
+            Text("A match is already in progress. Starting a new one will abandon it.")
         }
     }
 
@@ -200,12 +293,6 @@ struct SetupView: View {
         .buttonStyle(.plain)
     }
 
-    private func cycleFormat() {
-        let all = MatchFormat.allCases
-        guard let idx = all.firstIndex(of: format) else { return }
-        format = all[(idx + 1) % all.count]
-    }
-
     private func formatDisplayName(_ f: MatchFormat) -> String {
         switch f {
         case .bestOf3:      return "Best of 3"
@@ -227,7 +314,6 @@ struct SetupView: View {
         isTossing = true
         tossResultLabel = nil
 
-        // 5 full rotations (1800°) in 1.2 s, then snap to 0.
         let totalDegrees: Double = 1800
         withAnimation(.easeInOut(duration: 1.2)) {
             coinRotation = totalDegrees
@@ -244,26 +330,78 @@ struct SetupView: View {
         }
     }
 
-    private func startMatch() {
-        let config = MatchConfig(
-            playerA:     effectivePlayerA,
-            playerB:     effectivePlayerB,
-            playerA2:    matchType == .doubles ? playerA2 : "",
-            playerB2:    matchType == .doubles ? playerB2 : "",
-            format:      format,
-            firstServer: firstServer,
-            matchType:   matchType
+    private func buildConfig() -> MatchConfig {
+        MatchConfig(
+            playerA:      effectivePlayerA,
+            playerB:      effectivePlayerB,
+            playerA2:     matchType == .doubles ? playerA2 : "",
+            playerB2:     matchType == .doubles ? playerB2 : "",
+            format:       format,
+            firstServer:  firstServer,
+            matchType:    matchType,
+            walkoutSongA: walkoutSongA,
+            walkoutSongB: walkoutSongB
         )
-        mainViewModel.startNewMatch(config: config)
+    }
+
+    private func startMatch(action: PendingStartAction) {
+        if mainViewModel.scoringViewModel != nil {
+            pendingAction = action
+            showReplaceAlert = true
+            return
+        }
+        doStartMatch(action: action)
+    }
+
+    private func doStartMatch(action: PendingStartAction) {
+        let config = buildConfig()
+
+        switch action {
+        case .phone:
+            mainViewModel.startNewMatch(config: config)
+        case .watch:
+            mainViewModel.startNewMatch(config: config)
+            watchSync.sendMatchConfig(config)
+        }
+
+        // Reset form
+        playerA = ""
+        playerB = ""
+        playerA2 = ""
+        playerB2 = ""
+        walkoutSongA = nil
+        walkoutSongB = nil
+        tossResultLabel = nil
+        pendingAction = nil
+        walkoutPlayer.stop()
         selectedTab = .live
-        showPhoneScoring = true
+    }
+}
+
+// MARK: - WalkoutSongPicker
+
+private struct WalkoutSongPicker: View {
+    let label: String
+    @Binding var selection: String?
+    let songs: [String]
+
+    var body: some View {
+        Picker(label, selection: $selection) {
+            Text("None").tag(String?.none)
+            ForEach(songs, id: \.self) { song in
+                Text(song).tag(Optional(song))
+            }
+        }
+        .pickerStyle(.menu)
     }
 }
 
 // MARK: - Preview
 
-#Preview {
-    SetupView(selectedTab: .constant(.setup))
-        .environmentObject(MainViewModel())
-        .environmentObject(AppSettings.shared)
+struct SetupView_Previews: PreviewProvider {
+    static var previews: some View {
+        SetupView(selectedTab: .constant(.setup))
+            .environmentObject(MainViewModel())
+            .environmentObject(AppSettings.shared)
+    }
 }

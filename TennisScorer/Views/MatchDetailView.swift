@@ -12,9 +12,8 @@ struct MatchDetailView: View {
 
     let match: MatchState
 
-    private var points: [StoredPoint] {
-        MatchRepository.shared.pointsForMatch(match.matchId)
-    }
+    /// Loaded once on appear; never re-read from disk during normal re-renders.
+    @State private var points: [StoredPoint] = []
 
     var body: some View {
         ScrollView {
@@ -28,6 +27,16 @@ struct MatchDetailView: View {
         .navigationTitle("Match Detail")
         .navigationBarTitleDisplayMode(.inline)
         .background(Color(uiColor: .systemGroupedBackground))
+        .task {
+            points = MatchRepository.shared.pointsForMatch(match.matchId)
+        }
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                ShareLink(item: matchShareText) {
+                    Image(systemName: "square.and.arrow.up")
+                }
+            }
+        }
     }
 
     // MARK: - Match Header Card
@@ -131,66 +140,56 @@ struct MatchDetailView: View {
         return VStack(alignment: .leading, spacing: 12) {
             sectionHeader("Statistics")
 
-            // Total points
-            statRow(label: "Total Points Played",
-                    valueA: "\(stats.totalPoints)",
-                    valueB: "")
+            if points.isEmpty {
+                Text("No point-by-point data recorded.\nStatistics are available when scoring on your iPhone.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 8)
+            } else {
 
-            Divider()
-
-            // Points won
-            statRow(label: "Points Won",
-                    valueA: "\(stats.pointsWonA) (\(stats.pointsWonPctA)%)",
-                    valueB: "\(stats.pointsWonB) (\(stats.pointsWonPctB)%)")
-
-            Divider()
-
-            // Aces
-            statRow(label: "Aces",
-                    valueA: "\(stats.acesA)",
-                    valueB: "\(stats.acesB)")
-
-            Divider()
-
-            // Double faults
-            statRow(label: "Double Faults",
-                    valueA: "\(stats.doubleFaultsA)",
-                    valueB: "\(stats.doubleFaultsB)")
-
-            Divider()
-
-            // Winners
-            statRow(label: "Winners",
-                    valueA: "\(stats.winnersA)",
-                    valueB: "\(stats.winnersB)")
-
-            Divider()
-
-            // Unforced errors
-            statRow(label: "Unforced Errors",
-                    valueA: "\(stats.unforcedErrorsA)",
-                    valueB: "\(stats.unforcedErrorsB)")
-
-            Divider()
-
-            // First serve %
-            statRow(label: "1st Serve %",
-                    valueA: "\(stats.firstServePctA)%",
-                    valueB: "\(stats.firstServePctB)%")
-
-            Divider()
-
-            // Second serve %
-            statRow(label: "2nd Serve %",
-                    valueA: "\(stats.secondServePctA)%",
-                    valueB: "\(stats.secondServePctB)%")
-
-            if stats.avgSpeedA > 0 || stats.avgSpeedB > 0 {
+            Group {
+                statRow(label: "Total Points Played",
+                        valueA: "\(stats.totalPoints)",
+                        valueB: "")
                 Divider()
-                statRow(label: "Avg Serve Speed",
-                        valueA: stats.avgSpeedA > 0 ? "\(Int(stats.avgSpeedA)) km/h" : "—",
-                        valueB: stats.avgSpeedB > 0 ? "\(Int(stats.avgSpeedB)) km/h" : "—")
+                statRow(label: "Points Won",
+                        valueA: "\(stats.pointsWonA) (\(stats.pointsWonPctA)%)",
+                        valueB: "\(stats.pointsWonB) (\(stats.pointsWonPctB)%)")
+                Divider()
+                statRow(label: "Aces",
+                        valueA: "\(stats.acesA)",
+                        valueB: "\(stats.acesB)")
+                Divider()
+                statRow(label: "Double Faults",
+                        valueA: "\(stats.doubleFaultsA)",
+                        valueB: "\(stats.doubleFaultsB)")
+                Divider()
+                statRow(label: "Winners",
+                        valueA: "\(stats.winnersA)",
+                        valueB: "\(stats.winnersB)")
             }
+
+            Group {
+                Divider()
+                statRow(label: "Unforced Errors",
+                        valueA: "\(stats.unforcedErrorsA)",
+                        valueB: "\(stats.unforcedErrorsB)")
+                if stats.firstServePct > 0 || stats.secondServePct > 0 {
+                    Divider()
+                    statRow(label: "1st Serve Points",
+                            valueA: "\(stats.firstServePct)%",
+                            valueB: "")
+                }
+                if stats.avgServeSpeed > 0 {
+                    Divider()
+                    statRow(label: "Avg Serve Speed",
+                            valueA: "\(Int(stats.avgServeSpeed)) km/h",
+                            valueB: "")
+                }
+            }
+            } // end else (points not empty)
         }
         .padding()
         .background(Color(uiColor: .secondarySystemBackground))
@@ -245,6 +244,29 @@ struct MatchDetailView: View {
 
     // MARK: - Computed labels
 
+    private var matchShareText: String {
+        var lines = [
+            "🎾 Tennis Match Result",
+            "",
+            "\(match.config.teamName(.A)) vs \(match.config.teamName(.B))",
+            "Score: \(finalScoreLabel)",
+        ]
+        if let winner = match.winner {
+            lines.append("\(match.config.teamName(winner)) wins!")
+        }
+        lines += [
+            "",
+            "Format: \(formatLabel)",
+            "Date: \(dateLabel)",
+        ]
+        if match.endedAtMs > match.startedAtMs {
+            lines.append("Duration: \(durationLabel)")
+        }
+        lines.append("")
+        lines.append("Scored with Tennis Scorer")
+        return lines.joined(separator: "\n")
+    }
+
     private var matchupLabel: String {
         "\(match.config.teamName(.A)) vs \(match.config.teamName(.B))"
     }
@@ -265,11 +287,15 @@ struct MatchDetailView: View {
 
     private var dateLabel: String {
         let date = Date(timeIntervalSince1970: Double(match.startedAtMs) / 1000)
+        return Self.detailDateFormatter.string(from: date)
+    }
+
+    private static let detailDateFormatter: DateFormatter = {
         let f = DateFormatter()
         f.dateStyle = .medium
         f.timeStyle = .short
-        return f.string(from: date)
-    }
+        return f
+    }()
 
     private var durationLabel: String {
         guard match.endedAtMs > match.startedAtMs else { return "—" }
@@ -308,14 +334,13 @@ private struct MatchStats {
     let unforcedErrorsA: Int
     let unforcedErrorsB: Int
 
-    let firstServePctA: Int
-    let firstServePctB: Int
+    /// 1st-serve point rate (points where user tagged serve type as .first)
+    let firstServePct: Int
+    /// 2nd-serve point rate
+    let secondServePct: Int
 
-    let secondServePctA: Int
-    let secondServePctB: Int
-
-    let avgSpeedA: Double
-    let avgSpeedB: Double
+    /// Average speed across all logged serves (speed is logged per serve, not per winner).
+    let avgServeSpeed: Double
 
     init(points: [StoredPoint], match: MatchState) {
         totalPoints = points.count
@@ -341,30 +366,26 @@ private struct MatchStats {
         unforcedErrorsA = points.filter { $0.event.winner == .B && $0.event.tag == .unforcedError }.count
         unforcedErrorsB = points.filter { $0.event.winner == .A && $0.event.tag == .unforcedError }.count
 
-        // Serve percentages
-        let aServes = points.filter { $0.serveType != nil }
-        let aFirst  = aServes.filter { $0.serveType == .first }.count
-        let aSecond = aServes.filter { $0.serveType == .second }.count
-        let aTotal  = max(1, aFirst + aSecond)
+        // Serve type rates (across all tagged points)
+        let taggedServes = points.filter { $0.serveType != nil }
+        let firstCount   = taggedServes.filter { $0.serveType == .first  }.count
+        let secondCount  = taggedServes.filter { $0.serveType == .second }.count
+        let taggedTotal  = max(1, firstCount + secondCount)
+        firstServePct  = taggedTotal > 1 ? Int(round(Double(firstCount)  / Double(taggedTotal) * 100)) : 0
+        secondServePct = taggedTotal > 1 ? Int(round(Double(secondCount) / Double(taggedTotal) * 100)) : 0
 
-        // Simplified: split by which side won to approximate per-player
-        firstServePctA  = aFirst  > 0 ? Int(round(Double(aFirst)  / Double(aTotal) * 100)) : 0
-        firstServePctB  = aFirst  > 0 ? Int(round(Double(aFirst)  / Double(aTotal) * 100)) : 0
-        secondServePctA = aSecond > 0 ? Int(round(Double(aSecond) / Double(aTotal) * 100)) : 0
-        secondServePctB = aSecond > 0 ? Int(round(Double(aSecond) / Double(aTotal) * 100)) : 0
-
-        // Average serve speed
-        let speedsA = points.filter { $0.event.winner == .A }.compactMap { $0.serveSpeedKmh }
-        let speedsB = points.filter { $0.event.winner == .B }.compactMap { $0.serveSpeedKmh }
-        avgSpeedA = speedsA.isEmpty ? 0 : speedsA.reduce(0, +) / Double(speedsA.count)
-        avgSpeedB = speedsB.isEmpty ? 0 : speedsB.reduce(0, +) / Double(speedsB.count)
+        // Average serve speed across all logged speeds (speed belongs to the serve, not the winner)
+        let allSpeeds  = points.compactMap { $0.serveSpeedKmh }
+        avgServeSpeed  = allSpeeds.isEmpty ? 0 : allSpeeds.reduce(0, +) / Double(allSpeeds.count)
     }
 }
 
 // MARK: - Preview
 
-#Preview {
-    NavigationStack {
-        MatchDetailView(match: MatchState(config: MatchConfig()))
+struct MatchDetailView_Previews: PreviewProvider {
+    static var previews: some View {
+        NavigationStack {
+            MatchDetailView(match: MatchState(config: MatchConfig()))
+        }
     }
 }

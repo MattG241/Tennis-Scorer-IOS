@@ -1,0 +1,9 @@
+.DS_Store
+*.xcuserstate
+xcuserdata/
+.claude/
+.claude-preview/
+DerivedData/
+build/
+*.ipa
+GoogleCast.framework/

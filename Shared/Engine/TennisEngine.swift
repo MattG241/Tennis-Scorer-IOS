@@ -18,6 +18,12 @@ final class TennisEngine {
     /// The current, authoritative match state.
     private(set) var state: MatchState
 
+    /// Convenience alias used by Watch and other callers.
+    var currentState: MatchState { state }
+
+    /// `true` when there is at least one state on the undo stack.
+    var canUndo: Bool { !history.isEmpty }
+
     /// A stack of previous states enabling unlimited undo.
     private var history: [MatchState] = []
 
@@ -32,6 +38,13 @@ final class TennisEngine {
     /// (e.g. when reopening the app mid-match).
     init(state: MatchState) {
         self.state = state
+    }
+
+    /// Replaces the engine's current state with `newState` and clears the undo history.
+    /// Use this when syncing an authoritative state from the phone to the watch.
+    func restoreState(_ newState: MatchState) {
+        history.removeAll()
+        state = newState
     }
 
     // MARK: - Public API
@@ -123,7 +136,9 @@ final class TennisEngine {
 
     /// Immediately ends the match, determining the winner from the
     /// current score. Useful for "retire" / concede scenarios.
-    func endMatchNow() {
+    /// Returns the final `MatchState` for callers that need it.
+    @discardableResult
+    func endMatchNow() -> MatchState {
         // Save so the caller can undo even an explicit end.
         history.append(state)
 
@@ -151,6 +166,7 @@ final class TennisEngine {
                 state.winner = .A
             }
         }
+        return state
     }
 
     // MARK: - Private Scoring Helpers
@@ -169,8 +185,10 @@ final class TennisEngine {
 
         switch format {
         case .noAd:
-            // Sudden death at 3-3: next point wins.
-            return maxPts >= 4 || (a == 3 && b == 3)
+            // No-Ad: first to 4 points wins. At 3-3 (deuce) the *next* point wins,
+            // so the game is won when either side reaches 4 raw points.
+            // (3-3 alone must NOT trigger a win — the winning point must be played.)
+            return maxPts >= 4
         default:
             // Standard: first to 4, win by 2 (deuce).
             return maxPts >= 4 && diff >= 2

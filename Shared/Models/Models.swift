@@ -51,24 +51,34 @@ struct MatchConfig: Codable {
     var firstServer: PlayerSide
     var matchType:   MatchType
 
+    // MARK: Walkout songs
+    /// Filename of the walkout song for side A (nil = none).
+    var walkoutSongA: String?
+    /// Filename of the walkout song for side B (nil = none).
+    var walkoutSongB: String?
+
     // MARK: init
 
     init(
-        playerA:     String      = "Player 1",
-        playerB:     String      = "Player 2",
-        playerA2:    String      = "",
-        playerB2:    String      = "",
-        format:      MatchFormat = .bestOf3,
-        firstServer: PlayerSide  = .A,
-        matchType:   MatchType   = .singles
+        playerA:      String      = "Player 1",
+        playerB:      String      = "Player 2",
+        playerA2:     String      = "",
+        playerB2:     String      = "",
+        format:       MatchFormat = .bestOf3,
+        firstServer:  PlayerSide  = .A,
+        matchType:    MatchType   = .singles,
+        walkoutSongA: String?     = nil,
+        walkoutSongB: String?     = nil
     ) {
-        self.playerA     = playerA
-        self.playerB     = playerB
-        self.playerA2    = playerA2
-        self.playerB2    = playerB2
-        self.format      = format
-        self.firstServer = firstServer
-        self.matchType   = matchType
+        self.playerA      = playerA
+        self.playerB      = playerB
+        self.playerA2     = playerA2
+        self.playerB2     = playerB2
+        self.format       = format
+        self.firstServer  = firstServer
+        self.matchType    = matchType
+        self.walkoutSongA = walkoutSongA
+        self.walkoutSongB = walkoutSongB
     }
 
     // MARK: - Helpers
@@ -151,6 +161,11 @@ struct MatchState: Codable, Identifiable {
 
     // MARK: Identifiable
     var id: String { matchId }
+
+    // MARK: Helpers
+
+    /// Returns `true` when `side` is currently serving.
+    func isServing(_ side: PlayerSide) -> Bool { server == side }
 
     // MARK: init
 

@@ -105,6 +105,23 @@ struct ScoreFormatter {
         }
     }
 
+    // MARK: - Watch-friendly helpers
+
+    /// Current game points string for the Watch score header (e.g. "30-15", "Deuce").
+    static func points(_ state: MatchState) -> String {
+        displayPoints(state)
+    }
+
+    /// Current set games string for the Watch score header (e.g. "3 – 2").
+    static func games(_ state: MatchState) -> String {
+        "\(state.currentGamesA) – \(state.currentGamesB)"
+    }
+
+    /// Compact completed-sets string for the Watch score header (e.g. "6-4  7-5").
+    static func setScores(_ state: MatchState) -> String {
+        state.completedSets.map { "\($0.gamesA)-\($0.gamesB)" }.joined(separator: "  ")
+    }
+
     // MARK: - Private Helpers
 
     /// Maps a raw point count (0–3) to its tennis display label.

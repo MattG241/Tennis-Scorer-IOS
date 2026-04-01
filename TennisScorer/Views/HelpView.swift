@@ -17,22 +17,22 @@ struct HelpView: View {
                     VStack(alignment: .leading, spacing: 12) {
                         HelpParagraph(
                             heading: "Screen Zones",
-                            body: "The watch face is divided into three tap zones:\n• Blue (left half) — Player A wins the point\n• Green (right half) — Player B wins the point\n• Brown / bottom area — opens the control menu\n• Tapping the score area reads the score aloud"
+                            description: "The watch face is divided into three tap zones:\n• Blue (left half) — Player A wins the point\n• Green (right half) — Player B wins the point\n• Brown / bottom area — opens the control menu\n• Tapping the score area reads the score aloud"
                         )
 
                         HelpParagraph(
                             heading: "Pinch Gestures",
-                            body: "Single pinch — server wins the point.\nDouble pinch (two quick pinches within 400 ms) — receiver wins the point."
+                            description: "Single pinch — server wins the point.\nDouble pinch (two quick pinches within 400 ms) — receiver wins the point."
                         )
 
                         HelpParagraph(
                             heading: "Enabling Hand Gestures",
-                            body: "On your Apple Watch: Settings → Accessibility → Interaction and Dexterity → Hand Gestures → turn on. Requires watchOS 9 or later."
+                            description: "On your Apple Watch: Settings → Accessibility → Interaction and Dexterity → Hand Gestures → turn on. Requires watchOS 9 or later."
                         )
 
                         HelpParagraph(
                             heading: "Ambient Mode",
-                            body: "When your wrist drops, the watch enters always-on ambient mode showing the current score in a low-power display. Raise your wrist to return to the full interactive view."
+                            description: "When your wrist drops, the watch enters always-on ambient mode showing the current score in a low-power display. Raise your wrist to return to the full interactive view."
                         )
                     }
                 }
@@ -41,27 +41,32 @@ struct HelpView: View {
                     VStack(alignment: .leading, spacing: 12) {
                         HelpParagraph(
                             heading: "Awarding Points",
-                            body: "Tap the large Player A (blue) or Player B (green) button to award a point to that player. A spring animation confirms the tap."
+                            description: "Tap the large Player A (blue) or Player B (green) button to award a point. A haptic tap and spring animation confirm the input."
+                        )
+
+                        HelpParagraph(
+                            heading: "Serve Type",
+                            description: "Select 1st or 2nd before awarding a point to track serve type in your match statistics."
                         )
 
                         HelpParagraph(
                             heading: "Undo",
-                            body: "Tap the circular-arrow button in the bottom-left to undo the last point. Undo is unlimited during the match."
+                            description: "Tap the undo button (bottom-left) to reverse the last point. Undo is unlimited during the match."
                         )
 
                         HelpParagraph(
                             heading: "Point Tags",
-                            body: "Select a tag before awarding a point to classify it for statistics:\n• Normal — standard rally point\n• Ace — unreturned serve\n• DF — double fault\n• Win — outright winner\n• UE — unforced error"
+                            description: "Select a tag before awarding a point to classify it for statistics:\n• Ace — unreturned serve\n• DF — double fault\n• Win — outright winner\n• UE — unforced error"
                         )
 
                         HelpParagraph(
                             heading: "Serve Speed",
-                            body: "Tap the speedometer icon to enter the serve speed in km/h. The speed is saved with the next point you record."
+                            description: "Tap the speedometer icon to log the serve speed in km/h. The last speed is pre-filled for convenience — adjust or clear it each point."
                         )
 
                         HelpParagraph(
-                            heading: "Ending the Match",
-                            body: "Tap the X in the top-left to close the scoring screen. The match continues in the background and is accessible from the Live tab. To permanently end a match, use the End Match button on the Live tab."
+                            heading: "Closing the Scoring Screen",
+                            description: "Tap the X to close the scoring sheet. The match continues and the Live tab shows the current score. To end a match early, use the End Match button on the Live tab."
                         )
                     }
                 }
@@ -70,12 +75,12 @@ struct HelpView: View {
                     VStack(alignment: .leading, spacing: 12) {
                         HelpParagraph(
                             heading: "Match Formats",
-                            body: "• Best of 3 — standard format; first to win 2 sets. Tiebreak at 6-6.\n• Best of 5 — Grand Slam format; first to win 3 sets.\n• Short Sets — first to 4 games per set; tiebreak at 3-3.\n• No-Ad — standard sets but sudden death at deuce (no advantage games).\n• Tiebreak Only — a single 7-point (or 10-point) tiebreak decides the match."
+                            description: "• Best of 3 — standard format; first to win 2 sets. Tiebreak at 6-6.\n• Best of 5 — Grand Slam format; first to win 3 sets.\n• Short Sets — first to 4 games per set; tiebreak at 3-3.\n• No-Ad — standard sets but sudden death at deuce (no advantage games).\n• Tiebreak Only — a single 7-point (or 10-point) tiebreak decides the match."
                         )
 
                         HelpParagraph(
                             heading: "Coin Toss",
-                            body: "Tap the Coin Toss button to randomly select the first server. The result is applied automatically to the first-server selection."
+                            description: "Tap the Coin Toss button to randomly select the first server. The result is applied automatically to the first-server selection."
                         )
                     }
                 }
@@ -84,17 +89,22 @@ struct HelpView: View {
                     VStack(alignment: .leading, spacing: 12) {
                         HelpParagraph(
                             heading: "Real-Time Display",
-                            body: "The Live tab shows the current score card in real time, including set scores, current game score, the serving indicator, and the match situation badge (Match Point, Break Point, etc.)."
+                            description: "The Live tab shows the current score in real time — set scores, current game, server indicator, and the match situation badge (Match Point, Break Point, etc.)."
                         )
 
                         HelpParagraph(
-                            heading: "Score on Phone",
-                            body: "Tap 'Score on Phone' to open the full PhoneScoringView sheet and enter points manually while watching the match."
+                            heading: "Score on Phone or Watch",
+                            description: "Choose Phone or Watch using the segmented picker, then tap 'Score on Phone' or raise your wrist to score on Apple Watch."
                         )
 
                         HelpParagraph(
-                            heading: "Chromecast",
-                            body: "Tap the cast icon (top-right) to cast the score to a Chromecast-enabled TV on your local network. See the Chromecast section for details."
+                            heading: "Watch Status",
+                            description: "The watch icon in the top-right shows whether your Apple Watch is connected (green) or not reachable (grey). Tap it for details."
+                        )
+
+                        HelpParagraph(
+                            heading: "Resuming a Match",
+                            description: "If you close the app mid-match, a 'Resume Match' card appears on the Live tab the next time you open the app."
                         )
                     }
                 }
@@ -103,34 +113,16 @@ struct HelpView: View {
                     VStack(alignment: .leading, spacing: 12) {
                         HelpParagraph(
                             heading: "Modes",
-                            body: "• Off — no voice announcements.\n• Score Only — announces the current score after each point (e.g. 'Thirty fifteen').\n• Score + Situation — score plus any active situation (e.g. 'Match point').\n• Full (with Names) — complete call including player names (e.g. 'Federer leads, thirty fifteen')."
+                            description: "• Off — no voice announcements.\n• Score Only — announces the current score after each point (e.g. 'Thirty fifteen').\n• Score + Situation — score plus any active situation (e.g. 'Match point').\n• Full (with Names) — complete call including player names (e.g. 'Federer leads, thirty fifteen')."
                         )
 
                         HelpParagraph(
                             heading: "Changing the Mode",
-                            body: "Change the voice mode globally in Settings → Defaults → Voice Callouts. You can also override it per match in the Setup screen."
+                            description: "Change the voice mode globally in Settings → Defaults → Voice Callouts. You can also override it per match in the Setup screen."
                         )
                     }
                 }
 
-                HelpSectionCard(title: "Chromecast", iconName: "tv") {
-                    VStack(alignment: .leading, spacing: 12) {
-                        HelpParagraph(
-                            heading: "How to Cast",
-                            body: "Make sure your iPhone and Chromecast device are on the same Wi-Fi network. Tap the cast icon (circle.radiowaves.right) in the Live tab. Select your Chromecast from the list."
-                        )
-
-                        HelpParagraph(
-                            heading: "What Displays on TV",
-                            body: "The TV shows a large-format score overlay with:\n• Player names and set scores\n• Current game score in large text\n• The current server indicator\n• Situation badge (Match Point, etc.)\n• Match timer"
-                        )
-
-                        HelpParagraph(
-                            heading: "Stopping the Cast",
-                            body: "Tap the cast icon again and select 'Stop Casting', or disconnect directly from your Chromecast device."
-                        )
-                    }
-                }
             }
             .padding()
         }
@@ -201,7 +193,7 @@ private struct HelpSectionCard<Content: View>: View {
 private struct HelpParagraph: View {
 
     let heading: String
-    let body: String
+    let description: String
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -209,7 +201,7 @@ private struct HelpParagraph: View {
                 .font(.subheadline.bold())
                 .foregroundStyle(.primary)
 
-            Text(body)
+            Text(description)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -219,8 +211,10 @@ private struct HelpParagraph: View {
 
 // MARK: - Preview
 
-#Preview {
-    NavigationStack {
-        HelpView()
+struct HelpView_Previews: PreviewProvider {
+    static var previews: some View {
+        NavigationStack {
+            HelpView()
+        }
     }
 }

@@ -20,25 +20,57 @@ struct HistoryView: View {
             .sorted { $0.startedAtMs > $1.startedAtMs }
     }
 
+    private var abandonedMatches: [MatchState] {
+        repository.allMatches
+            .filter { $0.winner == nil }
+            .sorted { $0.startedAtMs > $1.startedAtMs }
+    }
+
     var body: some View {
         NavigationStack {
             Group {
-                if completedMatches.isEmpty {
+                if completedMatches.isEmpty && abandonedMatches.isEmpty {
                     emptyStateView
                 } else {
                     List {
-                        ForEach(completedMatches) { match in
-                            NavigationLink {
-                                MatchDetailView(match: match)
-                            } label: {
-                                MatchHistoryRow(match: match)
+                        if !abandonedMatches.isEmpty {
+                            Section("In Progress") {
+                                ForEach(abandonedMatches) { match in
+                                    MatchHistoryRow(match: match)
+                                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                            Button(role: .destructive) {
+                                                matchToDelete = match
+                                                showDeleteConfirm = true
+                                            } label: {
+                                                Label("Delete", systemImage: "trash")
+                                            }
+                                        }
+                                }
                             }
-                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                                Button(role: .destructive) {
-                                    matchToDelete = match
-                                    showDeleteConfirm = true
-                                } label: {
-                                    Label("Delete", systemImage: "trash")
+                        }
+
+                        if !completedMatches.isEmpty {
+                            Section("Completed") {
+                                ForEach(completedMatches) { match in
+                                    NavigationLink {
+                                        MatchDetailView(match: match)
+                                    } label: {
+                                        MatchHistoryRow(match: match)
+                                    }
+                                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                        Button(role: .destructive) {
+                                            matchToDelete = match
+                                            showDeleteConfirm = true
+                                        } label: {
+                                            Label("Delete", systemImage: "trash")
+                                        }
+                                    }
+                                    .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                                        ShareLink(item: shareText(for: match)) {
+                                            Label("Share", systemImage: "square.and.arrow.up")
+                                        }
+                                        .tint(TennisColors.scoreBlue)
+                                    }
                                 }
                             }
                         }
@@ -59,6 +91,23 @@ struct HistoryView: View {
         } message: { match in
             Text("Delete the match between \(match.config.teamName(.A)) and \(match.config.teamName(.B))? This cannot be undone.")
         }
+    }
+
+    // MARK: - Share helper
+
+    private func shareText(for match: MatchState) -> String {
+        let sets = match.completedSets.map { "\($0.gamesA)-\($0.gamesB)" }.joined(separator: "  ")
+        var lines = [
+            "🎾 Tennis Match Result",
+            "",
+            "\(match.config.teamName(.A)) vs \(match.config.teamName(.B))",
+            "Score: \(sets)",
+        ]
+        if let winner = match.winner {
+            lines.append("\(match.config.teamName(winner)) wins!")
+        }
+        lines += ["", "Scored with Tennis Scorer"]
+        return lines.joined(separator: "\n")
     }
 
     // MARK: - Empty State
@@ -103,10 +152,22 @@ struct MatchHistoryRow: View {
                     .clipShape(Capsule())
             }
 
-            // Final score
-            Text(finalScoreLabel)
-                .font(.caption.bold())
-                .foregroundStyle(TennisColors.courtGreenDark)
+            // Final score + winner
+            HStack(spacing: 6) {
+                Text(finalScoreLabel)
+                    .font(.caption.bold())
+                    .foregroundStyle(TennisColors.courtGreenDark)
+
+                if let winner = match.winner {
+                    Text("·")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text("\(match.config.teamName(winner)) wins")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
 
             // Date
             Text(dateLabel)
@@ -138,15 +199,21 @@ struct MatchHistoryRow: View {
 
     private var dateLabel: String {
         let date = Date(timeIntervalSince1970: Double(match.startedAtMs) / 1000)
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .short
-        return formatter.string(from: date)
+        return Self.rowDateFormatter.string(from: date)
     }
+
+    private static let rowDateFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateStyle = .medium
+        f.timeStyle = .short
+        return f
+    }()
 }
 
 // MARK: - Preview
 
-#Preview {
-    HistoryView()
+struct HistoryView_Previews: PreviewProvider {
+    static var previews: some View {
+        HistoryView()
+    }
 }

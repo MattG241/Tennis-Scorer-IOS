@@ -45,6 +45,10 @@ class MainViewModel: ObservableObject {
             config: config,
             voiceMode: settings.voiceCalloutMode
         )
+        // Wire the "New Match" button in the match-won overlay.
+        vm.onRequestNewMatch = { [weak self] in
+            self?.clearCompletedMatch()
+        }
         scoringViewModel = vm
         activeMatch      = vm.state
 
@@ -58,6 +62,9 @@ class MainViewModel: ObservableObject {
             state: state,
             voiceMode: settings.voiceCalloutMode
         )
+        vm.onRequestNewMatch = { [weak self] in
+            self?.clearCompletedMatch()
+        }
         scoringViewModel = vm
         activeMatch      = vm.state
     }
@@ -69,6 +76,7 @@ class MainViewModel: ObservableObject {
         if activeMatch?.matchId == matchId {
             activeMatch      = nil
             scoringViewModel = nil
+            watchSync.sendEndMatch()
         }
     }
 
@@ -77,26 +85,81 @@ class MainViewModel: ObservableObject {
         scoringViewModel?.endMatch()
         activeMatch      = scoringViewModel?.state
         scoringViewModel = nil
+        watchSync.sendEndMatch()
+    }
+
+    /// Convenience alias called from LiveView.
+    func endMatch() {
+        endActiveMatch()
+    }
+
+    /// Clears a match that has already ended through scoring (already saved).
+    /// Does not call endMatch() again.
+    func clearCompletedMatch() {
+        activeMatch      = nil
+        scoringViewModel = nil
+        repository.loadAll()
     }
 
     // MARK: - Private
 
     private func wireWatchCallbacks() {
-        // Forward point events received from the watch to the active scoring VM.
-        watchSync.onPointReceived = { [weak self] event in
-            guard let self = self,
-                  let vm = self.scoringViewModel,
-                  vm.state.matchId == event.matchId
-            else { return }
+        // Apply authoritative match state received from the Watch.
+        watchSync.onStateReceived = { [weak self] receivedState in
+            guard let self = self else { return }
 
-            // Translate the incoming PointEvent into an awardPoint call.
-            vm.awardPoint(to: event.winner)
+            // If we have an active scoring VM for this match, update it
+            if let vm = self.scoringViewModel, vm.state.matchId == receivedState.matchId {
+                vm.applyReceivedState(receivedState)
+                self.activeMatch = receivedState
+            } else {
+                // Watch started or is scoring a match we don't have a VM for.
+                // Create a scoring VM so the LiveView shows the match.
+                self.resumeMatch(receivedState)
+            }
         }
 
         // Speak the full score when the watch requests it.
         watchSync.onSpeakScoreRequested = { [weak self] state in
             guard let self = self else { return }
             self.speaker.speakFullScore(state, mode: self.settings.voiceCalloutMode)
+        }
+
+        // Watch ended its match — clear our active state
+        watchSync.onEndMatchReceived = { [weak self] in
+            guard let self = self else { return }
+            self.scoringViewModel = nil
+            self.activeMatch = nil
+            self.repository.loadAll()
+        }
+
+        // Watch requested the current state — push it
+        watchSync.onStateSyncRequested = { [weak self] in
+            guard let self = self else { return }
+            if let state = self.activeMatch {
+                print("[MainViewModel] Pushing active match state to watch")
+                self.watchSync.sendMatchConfig(state.config)
+                self.watchSync.sendMatchState(state)
+            } else {
+                print("[MainViewModel] No active match to push to watch")
+            }
+        }
+
+        // Watch wants to play a walkout song
+        watchSync.onPlayWalkoutReceived = { [weak self] side in
+            guard let self = self else { return }
+            let config = self.scoringViewModel?.state.config ?? self.activeMatch?.config
+            let song: String? = (side == "B") ? config?.walkoutSongB : config?.walkoutSongA
+            if let song = song {
+                print("[MainViewModel] Playing walkout song for side \(side): \(song)")
+                WalkoutPlayer.shared.play(song)
+            }
+        }
+
+        // Watch wants to stop walkout music
+        watchSync.onStopWalkoutReceived = {
+            print("[MainViewModel] Stopping walkout music (watch request)")
+            WalkoutPlayer.shared.stop()
         }
     }
 }

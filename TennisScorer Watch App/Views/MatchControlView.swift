@@ -25,6 +25,9 @@ struct MatchControlView: View {
             ZStack {
                 Color.black.ignoresSafeArea()
 
+                // Background gesture layer (below buttons so buttons take priority)
+                backgroundGestureOverlay(totalH: totalH, headerH: headerH, bottomH: bottomH)
+
                 VStack(spacing: 0) {
                     // ── TOP: Score header (28%) ──────────────────────────
                     scoreHeader
@@ -38,9 +41,6 @@ struct MatchControlView: View {
                     undoBar
                         .frame(height: bottomH)
                 }
-
-                // Overlay: background tap gestures for server / receiver
-                backgroundGestureOverlay(totalH: totalH, headerH: headerH, bottomH: bottomH)
 
                 // Overlay: gesture flash pill
                 if gestureFlashVisible {
@@ -177,10 +177,11 @@ struct MatchControlView: View {
             Button(action: { viewModel.undo() }) {
                 Text("Undo")
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(.white)
+                    .foregroundColor(viewModel.canUndo ? .white : .gray)
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.plain)
+            .disabled(!viewModel.canUndo)
             .onLongPressGesture(minimumDuration: 0.8) {
                 showConfirmEnd = true
             }
@@ -231,7 +232,6 @@ struct MatchControlView: View {
                     }
             }
             .frame(height: middleH)
-            .allowsHitTesting(false) // buttons on top capture taps; this only fires in empty space
 
             Spacer().frame(height: bottomH)
         }

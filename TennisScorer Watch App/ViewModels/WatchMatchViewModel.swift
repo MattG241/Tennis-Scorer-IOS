@@ -6,6 +6,9 @@ class WatchMatchViewModel: ObservableObject {
 
     @Published var state: MatchState? = nil
     @Published var situation: GameSituation = .none
+    @Published var canUndo: Bool = false
+    @Published var showWalkout: Bool = false
+    @Published var scoringOnPhone: Bool = false
 
     private var engine: TennisEngine? = nil
     private let syncClient: WatchSyncClient
@@ -19,6 +22,12 @@ class WatchMatchViewModel: ObservableObject {
         syncClient.onStateReceived = { [weak self] receivedState in
             self?.applyReceivedState(receivedState)
         }
+        syncClient.onEndMatchReceived = { [weak self] in
+            self?.handleRemoteEndMatch()
+        }
+        syncClient.onScoringModeReceived = { [weak self] mode in
+            self?.scoringOnPhone = (mode == "phone")
+        }
     }
 
     // MARK: - Config / State
@@ -27,22 +36,46 @@ class WatchMatchViewModel: ObservableObject {
         let newEngine = TennisEngine(config: config)
         self.engine = newEngine
         self.state = newEngine.currentState
-        self.situation = SituationDetector.detect(state: newEngine.currentState)
-
-        // Inform the phone of the new config
-        if let payload = encode(config) {
-            let message: [String: Any] = ["type": "match_config", "payload": payload]
-            sendApplicationContext(message)
-        }
+        self.situation = SituationDetector.detect(newEngine.currentState)
+        self.canUndo = newEngine.canUndo
+        self.showWalkout = (config.walkoutSongA != nil || config.walkoutSongB != nil)
     }
 
     func applyReceivedState(_ receivedState: MatchState) {
-        // Recreate engine from received state so local scoring stays in sync
-        let newEngine = TennisEngine(config: receivedState.config)
-        newEngine.restoreState(receivedState)
+        let newEngine = TennisEngine(state: receivedState)
         self.engine = newEngine
         self.state = receivedState
-        self.situation = SituationDetector.detect(state: receivedState)
+        self.situation = SituationDetector.detect(receivedState)
+        self.canUndo = newEngine.canUndo
+        // If scoring has started on the phone, dismiss walkout screen
+        if receivedState.pointNumber > 0 {
+            self.showWalkout = false
+        }
+    }
+
+    /// Phone told us to end the match — reset without sending back.
+    private func handleRemoteEndMatch() {
+        self.engine = nil
+        self.state = nil
+        self.situation = .none
+        self.canUndo = false
+        self.showWalkout = false
+        self.scoringOnPhone = false
+    }
+
+    // MARK: - Walkout
+
+    func playWalkout(side: PlayerSide) {
+        syncClient.sendPlayWalkout(side: side == .A ? "A" : "B")
+    }
+
+    func stopWalkout() {
+        syncClient.sendStopWalkout()
+    }
+
+    func startMatch() {
+        syncClient.sendStopWalkout()
+        self.showWalkout = false
     }
 
     // MARK: - Scoring actions
@@ -64,7 +97,8 @@ class WatchMatchViewModel: ObservableObject {
         engine.undo()
         let newState = engine.currentState
         self.state = newState
-        self.situation = SituationDetector.detect(state: newState)
+        self.situation = SituationDetector.detect(newState)
+        self.canUndo = engine.canUndo
         syncClient.sendMatchState(newState)
     }
 
@@ -73,9 +107,11 @@ class WatchMatchViewModel: ObservableObject {
             let finalState = engine.endMatchNow()
             syncClient.sendMatchState(finalState)
         }
+        syncClient.sendEndMatch()
         self.state = nil
         self.engine = nil
         self.situation = .none
+        self.canUndo = false
     }
 
     func speakScoreNow() {
@@ -89,22 +125,8 @@ class WatchMatchViewModel: ObservableObject {
         guard let engine = engine else { return }
         let newState = engine.currentState
         self.state = newState
-        self.situation = SituationDetector.detect(state: newState)
+        self.situation = SituationDetector.detect(newState)
+        self.canUndo = engine.canUndo
         syncClient.sendMatchState(newState)
-        syncClient.sendPointEvent(event)
-    }
-
-    private func encode<T: Encodable>(_ value: T) -> String? {
-        guard let data = try? JSONEncoder().encode(value) else { return nil }
-        return String(data: data, encoding: .utf8)
-    }
-
-    private func sendApplicationContext(_ context: [String: Any]) {
-        // Application context is used for non-urgent state sharing
-        // when the phone may not be immediately reachable
-        DispatchQueue.global(qos: .background).async {
-            // No-op placeholder: phone-initiated configs are handled
-            // via WatchSyncClient messages; this is just for future use.
-        }
     }
 }

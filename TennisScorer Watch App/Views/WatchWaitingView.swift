@@ -13,12 +13,17 @@ struct WatchWaitingView: View {
             Text("🎾")
                 .font(.system(size: 32))
 
-            Text("No match")
-                .font(.system(size: 13, weight: .medium))
-                .foregroundColor(.gray)
+            Text("No Active Match")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(.white)
+
+            Text("Start a match on your iPhone, or set up one here.")
+                .font(.system(size: 10))
+                .foregroundColor(Color.gray.opacity(0.8))
+                .multilineTextAlignment(.center)
 
             Button(action: { showSetup = true }) {
-                Text("Setup here")
+                Text("Quick Setup")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundColor(.white)
                     .padding(.horizontal, 12)
@@ -27,11 +32,6 @@ struct WatchWaitingView: View {
                     .cornerRadius(8)
             }
             .buttonStyle(.plain)
-
-            Text("or configure on phone")
-                .font(.system(size: 10))
-                .foregroundColor(Color.gray.opacity(0.7))
-                .multilineTextAlignment(.center)
         }
         .padding(8)
         .sheet(isPresented: $showSetup) {

@@ -34,7 +34,7 @@ struct MainTabView: View {
                 }
                 .tag(AppTab.live)
                 // Red badge dot when a match is active
-                .badge(mainViewModel.scoringViewModel != nil ? " " : nil)
+                .badge(mainViewModel.scoringViewModel != nil ? 1 : 0)
 
             // MARK: Setup tab
             SetupView(selectedTab: $selectedTab)
@@ -57,24 +57,15 @@ struct MainTabView: View {
                 }
                 .tag(AppTab.settings)
         }
-        .preferredColorScheme(colorScheme(for: settings.themeMode))
-    }
-
-    // MARK: - Helpers
-
-    private func colorScheme(for mode: ThemeMode) -> ColorScheme? {
-        switch mode {
-        case .system: return nil
-        case .light:  return .light
-        case .dark:   return .dark
-        }
     }
 }
 
 // MARK: - Preview
 
-#Preview {
-    MainTabView()
-        .environmentObject(MainViewModel())
-        .environmentObject(AppSettings.shared)
+struct MainTabView_Previews: PreviewProvider {
+    static var previews: some View {
+        MainTabView()
+            .environmentObject(MainViewModel())
+            .environmentObject(AppSettings.shared)
+    }
 }

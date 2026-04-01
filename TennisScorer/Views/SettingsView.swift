@@ -51,6 +51,17 @@ struct SettingsView: View {
                     .pickerStyle(.menu)
                 }
 
+                // MARK: Privacy
+                Section("Privacy") {
+                    HStack(spacing: 12) {
+                        Image(systemName: "lock.shield")
+                            .foregroundStyle(TennisColors.courtGreenDark)
+                        Text("All match data is stored locally on this device. Nothing is sent to external servers.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
                 // MARK: About
                 Section("About") {
                     HStack {
@@ -95,7 +106,9 @@ struct SettingsView: View {
 
 // MARK: - Preview
 
-#Preview {
-    SettingsView()
-        .environmentObject(AppSettings.shared)
+struct SettingsView_Previews: PreviewProvider {
+    static var previews: some View {
+        SettingsView()
+            .environmentObject(AppSettings.shared)
+    }
 }

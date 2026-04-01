@@ -87,8 +87,8 @@ struct SpeechFormatter {
         }
 
         // --- Game won (no set change) ---
-        let prevGamesTotal = previous.currentGamesA + previous.currentGamesB
-        let currGamesTotal = current.currentGamesA  + current.currentGamesB
+        _ = previous.currentGamesA + previous.currentGamesB
+        _ = current.currentGamesA  + current.currentGamesB
         // A game was just completed if the totals diverged (reset to 0 is caught
         // by the set-won branch above; here we catch the mid-set case).
         let gameJustWon: Bool = {

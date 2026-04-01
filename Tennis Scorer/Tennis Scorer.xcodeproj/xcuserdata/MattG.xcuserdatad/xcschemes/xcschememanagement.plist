@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>SchemeUserState</key>
+	<dict>
+		<key>Tennis Scorer Watch App Watch App.xcscheme_^#shared#^_</key>
+		<dict>
+			<key>orderHint</key>
+			<integer>1</integer>
+		</dict>
+		<key>Tennis Scorer.xcscheme_^#shared#^_</key>
+		<dict>
+			<key>orderHint</key>
+			<integer>0</integer>
+		</dict>
+	</dict>
+	<key>SuppressBuildableAutocreation</key>
+	<dict>
+		<key>A9431A2E2F7A58F80088A94D</key>
+		<dict>
+			<key>primary</key>
+			<true/>
+		</dict>
+		<key>A9431A3F2F7A58FE0088A94D</key>
+		<dict>
+			<key>primary</key>
+			<true/>
+		</dict>
+		<key>A9431A492F7A58FE0088A94D</key>
+		<dict>
+			<key>primary</key>
+			<true/>
+		</dict>
+		<key>A9431A622F7A5C520088A94D</key>
+		<dict>
+			<key>primary</key>
+			<true/>
+		</dict>
+	</dict>
+</dict>
+</plist>
