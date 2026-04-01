@@ -6,7 +6,7 @@ on:
 jobs:
   build:
     runs-on: macos-15
-    timeout-minutes: 30
+    timeout-minutes: 45
 
     steps:
       - name: Checkout
@@ -17,6 +17,9 @@ jobs:
 
       - name: Show Xcode version
         run: xcodebuild -version
+
+      - name: Install watchOS platform
+        run: xcodebuild -downloadPlatform watchOS
 
       - name: Create App Store Connect API key file
         env:
@@ -42,7 +45,7 @@ jobs:
             -authenticationKeyID ${{ secrets.APPSTORE_API_KEY_ID }} \
             -authenticationKeyIssuerID ${{ secrets.APPSTORE_API_ISSUER_ID }}
 
-      - name: Create export options
+      - name: Export and upload
         run: |
           cat > $RUNNER_TEMP/ExportOptions.plist << 'PLIST'
           <?xml version="1.0" encoding="UTF-8"?>
@@ -59,8 +62,6 @@ jobs:
           </plist>
           PLIST
 
-      - name: Export and upload
-        run: |
           xcodebuild -exportArchive \
             -archivePath $RUNNER_TEMP/TennisScorer.xcarchive \
             -exportOptionsPlist $RUNNER_TEMP/ExportOptions.plist \
