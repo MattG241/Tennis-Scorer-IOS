@@ -206,17 +206,19 @@ struct GameSituation: Equatable {
     var type:    SituationType
     /// Which side the situation is *for* (nil when type is .none).
     var forSide: PlayerSide?
+    /// How many opportunities the favoured side has (e.g. 3 break points at 0-40).
+    var count:   Int
 
-    static let none = GameSituation(type: .none, forSide: nil)
+    static let none = GameSituation(type: .none, forSide: nil, count: 0)
 
     // Manual Equatable conformance because SituationType is not auto-Equatable.
     static func == (lhs: GameSituation, rhs: GameSituation) -> Bool {
         switch (lhs.type, rhs.type) {
         case (.none,       .none):       return true
-        case (.matchPoint, .matchPoint): return lhs.forSide == rhs.forSide
-        case (.setPoint,   .setPoint):   return lhs.forSide == rhs.forSide
-        case (.breakPoint, .breakPoint): return lhs.forSide == rhs.forSide
-        case (.gamePoint,  .gamePoint):  return lhs.forSide == rhs.forSide
+        case (.matchPoint, .matchPoint): return lhs.forSide == rhs.forSide && lhs.count == rhs.count
+        case (.setPoint,   .setPoint):   return lhs.forSide == rhs.forSide && lhs.count == rhs.count
+        case (.breakPoint, .breakPoint): return lhs.forSide == rhs.forSide && lhs.count == rhs.count
+        case (.gamePoint,  .gamePoint):  return lhs.forSide == rhs.forSide && lhs.count == rhs.count
         default:                         return false
         }
     }

@@ -1,5 +1,7 @@
 import Foundation
 import Combine
+import StoreKit
+import UIKit
 
 class PhoneScoringViewModel: ObservableObject {
 
@@ -179,8 +181,34 @@ class PhoneScoringViewModel: ObservableObject {
         // 6. Speak the transition.
         speaker.speakTransition(previous: previous, current: current, mode: voiceMode)
 
-        // 7. Reset per-point selections; keep last speed as a starting reference.
+        // 7. Check if a game just completed and prompt for review after the 3rd game.
+        let totalGames = current.currentGamesA + current.currentGamesB
+            + current.completedSets.reduce(0) { $0 + $1.gamesA + $1.gamesB }
+        let prevTotalGames = previous.currentGamesA + previous.currentGamesB
+            + previous.completedSets.reduce(0) { $0 + $1.gamesA + $1.gamesB }
+        if totalGames >= 3 && prevTotalGames < 3 {
+            requestAppStoreReview()
+        }
+
+        // 8. Reset per-point selections; keep last speed as a starting reference.
         selectedPointTag  = .normal
         selectedServeType = .first
+    }
+
+    private static let reviewRequestedKey = "hasRequestedReview"
+
+    private func requestAppStoreReview() {
+        // Only prompt once per install to avoid annoying the user.
+        let defaults = UserDefaults.standard
+        guard !defaults.bool(forKey: Self.reviewRequestedKey) else { return }
+        defaults.set(true, forKey: Self.reviewRequestedKey)
+
+        // Use the modern SKStoreReviewController API.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            if let scene = UIApplication.shared.connectedScenes
+                .first(where: { $0.activationState == .foregroundActive }) as? UIWindowScene {
+                SKStoreReviewController.requestReview(in: scene)
+            }
+        }
     }
 }

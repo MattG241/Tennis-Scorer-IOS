@@ -164,7 +164,15 @@ class ScoreSpeaker: NSObject, ObservableObject, AVSpeechSynthesizerDelegate {
            !text.isEmpty {
             speak(text)
         } else {
-            let text = SpeechFormatter.fullScoreUpdate(current, includePlayerNames: withNames)
+            var text = SpeechFormatter.fullScoreUpdate(current, includePlayerNames: withNames)
+            // Append situation announcement (e.g. "3 break points") for richer modes.
+            if mode == .withSituation || mode == .withPlayerNames {
+                let situation = SituationDetector.detect(current)
+                if let sitText = SpeechFormatter.situationAnnouncement(
+                    situation, state: current, includePlayerNames: withNames) {
+                    text += " \(sitText)"
+                }
+            }
             if !text.isEmpty { speak(text) }
         }
     }

@@ -44,6 +44,12 @@ class WatchSyncManager: NSObject, ObservableObject, WCSessionDelegate {
         static let payload = "payload"
     }
 
+    /// Periodic timer that pushes state to the watch every 30s while a match is active.
+    private var resyncTimer: Timer?
+
+    /// Last state sent — retained for retry and periodic push.
+    private var lastSentState: MatchState?
+
     private override init() {
         super.init()
     }
@@ -67,7 +73,29 @@ class WatchSyncManager: NSObject, ObservableObject, WCSessionDelegate {
     }
 
     func sendMatchState(_ state: MatchState) {
+        lastSentState = state
         send(type: .matchState, payload: state)
+    }
+
+    // MARK: - Periodic resync
+
+    /// Start a 30-second timer that pushes the latest state to the watch.
+    /// Call when a match becomes active.
+    func startResyncTimer() {
+        stopResyncTimer()
+        resyncTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
+            guard let self = self,
+                  let state = self.lastSentState,
+                  WCSession.default.isReachable else { return }
+            print("[WatchSyncManager] Periodic resync — pushing state to watch")
+            self.send(type: .matchState, payload: state)
+        }
+    }
+
+    /// Stop the periodic resync timer.
+    func stopResyncTimer() {
+        resyncTimer?.invalidate()
+        resyncTimer = nil
     }
 
     /// Tells the watch which device is scoring: "phone" or "watch".
@@ -238,8 +266,19 @@ class WatchSyncManager: NSObject, ObservableObject, WCSessionDelegate {
                 MessageKey.payload: jsonStr
             ]
             if session.isReachable {
-                session.sendMessage(message, replyHandler: nil) { error in
-                    print("[WatchSyncManager] sendMessage error: \(error)")
+                session.sendMessage(message, replyHandler: nil) { [weak self] error in
+                    print("[WatchSyncManager] sendMessage error: \(error) — retrying in 2s")
+                    // Retry once after 2 seconds; fall back to applicationContext if that fails too.
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                        guard WCSession.default.isReachable else {
+                            try? WCSession.default.updateApplicationContext(message)
+                            return
+                        }
+                        WCSession.default.sendMessage(message, replyHandler: nil) { retryError in
+                            print("[WatchSyncManager] Retry also failed: \(retryError) — falling back to applicationContext")
+                            try? WCSession.default.updateApplicationContext(message)
+                        }
+                    }
                 }
             } else {
                 try session.updateApplicationContext(message)

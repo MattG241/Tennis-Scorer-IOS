@@ -12,6 +12,12 @@ class WatchSyncClient: NSObject, ObservableObject, WCSessionDelegate {
     var onEndMatchReceived: (() -> Void)?
     var onScoringModeReceived: ((String) -> Void)?
 
+    /// Tracks the highest pointNumber we've applied, to ignore stale state.
+    var lastAppliedPointNumber: Int = -1
+
+    /// Periodic timer that requests state from the phone every 30s.
+    private var resyncTimer: Timer?
+
     private override init() {
         super.init()
     }
@@ -41,11 +47,22 @@ class WatchSyncClient: NSObject, ObservableObject, WCSessionDelegate {
             print("[WatchSyncClient] sendMatchState: failed to encode state")
             return
         }
+        lastAppliedPointNumber = state.pointNumber
         let message: [String: Any] = ["type": "match_state", "payload": payload]
         if session.isReachable {
             print("[WatchSyncClient] Sending match_state to phone (reachable)")
             session.sendMessage(message, replyHandler: nil) { error in
-                print("[WatchSyncClient] sendMatchState error: \(error)")
+                print("[WatchSyncClient] sendMatchState error: \(error) — retrying in 2s")
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                    guard WCSession.default.isReachable else {
+                        WCSession.default.transferUserInfo(message)
+                        return
+                    }
+                    WCSession.default.sendMessage(message, replyHandler: nil) { retryError in
+                        print("[WatchSyncClient] Retry also failed: \(retryError) — using transferUserInfo")
+                        WCSession.default.transferUserInfo(message)
+                    }
+                }
             }
         } else {
             print("[WatchSyncClient] Sending match_state via transferUserInfo (not reachable)")
@@ -142,6 +159,24 @@ class WatchSyncClient: NSObject, ObservableObject, WCSessionDelegate {
         }
     }
 
+    // MARK: - Periodic resync
+
+    /// Start a 30-second timer that requests state from the phone.
+    func startResyncTimer() {
+        stopResyncTimer()
+        resyncTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
+            guard WCSession.default.isReachable else { return }
+            print("[WatchSyncClient] Periodic resync — requesting state from phone")
+            self?.requestStateSync()
+        }
+    }
+
+    /// Stop the periodic resync timer.
+    func stopResyncTimer() {
+        resyncTimer?.invalidate()
+        resyncTimer = nil
+    }
+
     /// Asks the phone to send its current match state/config.
     func requestStateSync() {
         let session = WCSession.default
@@ -189,6 +224,12 @@ class WatchSyncClient: NSObject, ObservableObject, WCSessionDelegate {
             case "match_state":
                 guard let payload = message["payload"] as? String,
                       let state = self.decode(MatchState.self, from: payload) else { return }
+                // Dedup: only apply if the received state is at least as fresh as what we have.
+                guard state.pointNumber >= self.lastAppliedPointNumber else {
+                    print("[WatchSyncClient] Ignoring stale state (received point \(state.pointNumber), have \(self.lastAppliedPointNumber))")
+                    return
+                }
+                self.lastAppliedPointNumber = state.pointNumber
                 self.onStateReceived?(state)
 
             case "scoring_mode":

@@ -52,10 +52,12 @@ struct SituationDetector {
             let canWinGame = canWinGameWithNextPoint(side: side, game: game, format: format)
             guard canWinGame else { continue }
 
+            let count = countPointOpportunities(side: side, game: game, format: format)
+
             // --- MATCH POINT ---
             if format == .tiebreakOnly {
                 // Tiebreak-only: winning the game wins the match directly.
-                return GameSituation(type: .matchPoint, forSide: side)
+                return GameSituation(type: .matchPoint, forSide: side, count: count)
             }
 
             let wouldWinSet = canWinSetWithNextGame(
@@ -73,13 +75,13 @@ struct SituationDetector {
                     format:  format
                 )
                 if wouldWinMatch {
-                    return GameSituation(type: .matchPoint, forSide: side)
+                    return GameSituation(type: .matchPoint, forSide: side, count: count)
                 }
             }
 
             // --- SET POINT ---
             if wouldWinSet {
-                return GameSituation(type: .setPoint, forSide: side)
+                return GameSituation(type: .setPoint, forSide: side, count: count)
             }
         }
 
@@ -89,14 +91,16 @@ struct SituationDetector {
             let isReceiver = (side != state.server)
             guard isReceiver else { continue }
             if canWinGameWithNextPoint(side: side, game: game, format: format) {
-                return GameSituation(type: .breakPoint, forSide: side)
+                let count = countPointOpportunities(side: side, game: game, format: format)
+                return GameSituation(type: .breakPoint, forSide: side, count: count)
             }
         }
 
         // --- GAME POINT ---
         for side in PlayerSide.allCases {
             if canWinGameWithNextPoint(side: side, game: game, format: format) {
-                return GameSituation(type: .gamePoint, forSide: side)
+                let count = countPointOpportunities(side: side, game: game, format: format)
+                return GameSituation(type: .gamePoint, forSide: side, count: count)
             }
         }
 
@@ -140,6 +144,46 @@ struct SituationDetector {
         let simB = setsWonB + (side == .B ? 1 : 0)
         let target = (format == .bestOf5) ? 3 : 2
         return simA >= target || simB >= target
+    }
+
+    /// Counts how many point opportunities `side` has before the opponent
+    /// could equalise. This gives real tennis-style counts:
+    ///   0-40 → 3 break points,  15-40 → 2,  30-40 → 1,  Adv → 1, etc.
+    ///
+    /// For tiebreaks the same principle applies (e.g. 3-6 → 3 set/match points).
+    static func countPointOpportunities(side: PlayerSide,
+                                         game: GamePoints,
+                                         format: MatchFormat) -> Int {
+        let myPts  = (side == .A) ? game.rawA : game.rawB
+        let oppPts = (side == .A) ? game.rawB : game.rawA
+
+        if game.tiebreak {
+            // Tiebreak: first to 7, win by 2.
+            // Opportunities = myPts - oppPts when myPts >= 6 and myPts > oppPts.
+            // At 6-3 the leader has 3 opportunities (opponent needs 3 to reach 6).
+            guard myPts >= 6 && myPts > oppPts else { return 1 }
+            return myPts - oppPts
+        }
+
+        switch format {
+        case .noAd:
+            // No-Ad: at 3-3 (deuce) the next point decides — always 1.
+            return 1
+        default:
+            // Standard advantage scoring.
+            // At 40-0 (3-0): 3 game points (opponent needs 3 to reach deuce).
+            // At 40-15 (3-1): 2 game points.
+            // At 40-30 (3-2): 1 game point.
+            // At Adv (e.g. 4-3): 1 game point.
+            guard myPts >= 3 && myPts > oppPts else { return 1 }
+            if oppPts < 3 {
+                // Opponent hasn't reached 40 yet: count = 3 - oppPts
+                // e.g. 40-0 → 3, 40-15 → 2, 40-30 → 1
+                return 3 - oppPts
+            }
+            // Both at deuce or advantage territory: always 1
+            return 1
+        }
     }
 
     // MARK: - Simulation helpers (mirrors TennisEngine logic exactly)

@@ -268,11 +268,13 @@ struct MatchControlView: View {
     }
 
     private func situationBadge(_ situation: GameSituation) -> SituationBadgeInfo? {
+        let count = situation.count
+        let suffix = count > 1 ? "×\(count)" : ""
         switch situation.type {
-        case .matchPoint:   return SituationBadgeInfo(label: "MP", color: .red)
-        case .setPoint:     return SituationBadgeInfo(label: "SP", color: .orange)
-        case .breakPoint:   return SituationBadgeInfo(label: "BP", color: .yellow)
-        case .gamePoint:    return SituationBadgeInfo(label: "GP", color: Color(red: 0.804, green: 0.863, blue: 0.224))
+        case .matchPoint:   return SituationBadgeInfo(label: "MP\(suffix)", color: .red)
+        case .setPoint:     return SituationBadgeInfo(label: "SP\(suffix)", color: .orange)
+        case .breakPoint:   return SituationBadgeInfo(label: "BP\(suffix)", color: .yellow)
+        case .gamePoint:    return SituationBadgeInfo(label: "GP\(suffix)", color: Color(red: 0.804, green: 0.863, blue: 0.224))
         default:            return nil
         }
     }

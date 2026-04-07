@@ -255,6 +255,36 @@ struct SpeechFormatter {
         return "\(leader) leads \(ahead)-\(behind) in the \(setOrdinal) set."
     }
 
+    // MARK: - Situation Announcement
+
+    /// Returns a spoken description of the current pressure situation,
+    /// e.g. "3 break points" or "match point".
+    /// Returns `nil` when no situation applies.
+    static func situationAnnouncement(_ situation: GameSituation,
+                                       state: MatchState,
+                                       includePlayerNames: Bool) -> String? {
+        guard situation.type != .none else { return nil }
+
+        func name(_ side: PlayerSide) -> String {
+            includePlayerNames ? state.config.teamName(side) : ""
+        }
+
+        let count = situation.count
+        let label: String
+        switch situation.type {
+        case .matchPoint: label = count > 1 ? "\(count) match points" : "Match point"
+        case .setPoint:   label = count > 1 ? "\(count) set points"   : "Set point"
+        case .breakPoint: label = count > 1 ? "\(count) break points" : "Break point"
+        case .gamePoint:  label = count > 1 ? "\(count) game points"  : "Game point"
+        case .none:       return nil
+        }
+
+        if includePlayerNames, let side = situation.forSide {
+            return "\(label), \(name(side))."
+        }
+        return "\(label)."
+    }
+
     /// Maps a raw point count (0–3) to its spoken tennis word.
     private static func spokenPointLabel(_ raw: Int) -> String {
         switch raw {

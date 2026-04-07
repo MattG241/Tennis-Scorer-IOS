@@ -39,6 +39,8 @@ class WatchMatchViewModel: ObservableObject {
         self.situation = SituationDetector.detect(newEngine.currentState)
         self.canUndo = newEngine.canUndo
         self.showWalkout = (config.walkoutSongA != nil || config.walkoutSongB != nil)
+        syncClient.lastAppliedPointNumber = 0
+        syncClient.startResyncTimer()
     }
 
     func applyReceivedState(_ receivedState: MatchState) {
@@ -61,6 +63,8 @@ class WatchMatchViewModel: ObservableObject {
         self.canUndo = false
         self.showWalkout = false
         self.scoringOnPhone = false
+        syncClient.stopResyncTimer()
+        syncClient.lastAppliedPointNumber = -1
     }
 
     // MARK: - Walkout
@@ -108,6 +112,8 @@ class WatchMatchViewModel: ObservableObject {
             syncClient.sendMatchState(finalState)
         }
         syncClient.sendEndMatch()
+        syncClient.stopResyncTimer()
+        syncClient.lastAppliedPointNumber = -1
         self.state = nil
         self.engine = nil
         self.situation = .none

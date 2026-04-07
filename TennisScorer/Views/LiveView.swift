@@ -488,12 +488,13 @@ struct SituationBadge: View {
     }
 
     private var situationLabel: String {
+        let count = situation.count
         switch situation.type {
         case .none:       return ""
-        case .matchPoint: return "MATCH POINT"
-        case .setPoint:   return "SET POINT"
-        case .breakPoint: return "BREAK POINT"
-        case .gamePoint:  return "GAME POINT"
+        case .matchPoint: return count > 1 ? "\(count) MATCH POINTS" : "MATCH POINT"
+        case .setPoint:   return count > 1 ? "\(count) SET POINTS"   : "SET POINT"
+        case .breakPoint: return count > 1 ? "\(count) BREAK POINTS" : "BREAK POINT"
+        case .gamePoint:  return count > 1 ? "\(count) GAME POINTS"  : "GAME POINT"
         }
     }
 

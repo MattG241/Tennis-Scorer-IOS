@@ -54,6 +54,7 @@ class MainViewModel: ObservableObject {
 
         // Inform the watch about the new match configuration.
         watchSync.sendMatchConfig(config)
+        watchSync.startResyncTimer()
     }
 
     /// Resumes a match that was previously in progress.
@@ -67,6 +68,7 @@ class MainViewModel: ObservableObject {
         }
         scoringViewModel = vm
         activeMatch      = vm.state
+        watchSync.startResyncTimer()
     }
 
     /// Deletes a match from persistence and clears any active session if it matches.
@@ -86,6 +88,7 @@ class MainViewModel: ObservableObject {
         activeMatch      = scoringViewModel?.state
         scoringViewModel = nil
         watchSync.sendEndMatch()
+        watchSync.stopResyncTimer()
     }
 
     /// Convenience alias called from LiveView.
@@ -98,6 +101,7 @@ class MainViewModel: ObservableObject {
     func clearCompletedMatch() {
         activeMatch      = nil
         scoringViewModel = nil
+        watchSync.stopResyncTimer()
         repository.loadAll()
     }
 
@@ -130,6 +134,7 @@ class MainViewModel: ObservableObject {
             guard let self = self else { return }
             self.scoringViewModel = nil
             self.activeMatch = nil
+            self.watchSync.stopResyncTimer()
             self.repository.loadAll()
         }
 
